@@ -18,7 +18,7 @@ enum CatLayout {
     /// Points (or pixels, if `size` is in pixels) per local unit.
     static func scale(in size: CGSize, catSize: Float) -> Float {
         let r = cushionRect(in: size)
-        return Float(min(r.width, r.height)) * 0.50 * catSize
+        return Float(min(r.width, r.height)) * 0.54 * catSize
     }
 
     static func toLocal(_ point: CGPoint, in size: CGSize, catSize: Float) -> SIMD2<Float> {

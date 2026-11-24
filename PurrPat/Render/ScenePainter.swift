@@ -93,24 +93,44 @@ enum ScenePainter {
 
     private static func drawWeave(_ cg: CGContext, rect: CGRect, day: Bool) {
         cg.saveGState()
-        cg.setAlpha(day ? 0.18 : 0.12)
-        cg.setStrokeColor((day ? UIColor(red: 0.45, green: 0.36, blue: 0.24, alpha: 1) : UIColor(white: 1, alpha: 1)).cgColor)
-        cg.setLineWidth(1)
-        var x = rect.minX
-        while x < rect.maxX {
-            cg.move(to: CGPoint(x: x, y: rect.minY))
-            cg.addLine(to: CGPoint(x: x, y: rect.maxY))
-            x += 5
-        }
-        var y = rect.minY
-        while y < rect.maxY {
-            cg.move(to: CGPoint(x: rect.minX, y: y))
-            cg.addLine(to: CGPoint(x: rect.maxX, y: y))
-            y += 5
-        }
-        cg.strokePath()
+        cg.setAlpha(day ? 0.07 : 0.05)
+        cg.draw(linenTile(day: day), in: rect)
         cg.restoreGState()
     }
+
+    /// A soft irregular linen, generated once. A ruled grid reads as graph paper, not cloth.
+    private static func linenTile(day: Bool) -> CGImage {
+        let key = day ? "day" : "night"
+        if let cached = linenCache[key] { return cached }
+        let n = 96
+        var px = [UInt8](repeating: 0, count: n * n * 4)
+        for y in 0..<n {
+            for x in 0..<n {
+                let p = SIMD2(Float(x) / 9.0, Float(y) / 9.0)
+                let v = FurNoise.fbm(p, octaves: 3)
+                let thread = 0.5 + 0.5 * sin(Float(x) * 0.85 + v * 2) * sin(Float(y) * 0.8)
+                let tone = min(1, max(0, 0.35 + 0.4 * v + 0.25 * thread))
+                let o = (y * n + x) * 4
+                let b = UInt8(tone * 255)
+                px[o] = b
+                px[o + 1] = b
+                px[o + 2] = b
+                px[o + 3] = 255
+            }
+        }
+        let data = Data(px) as CFData
+        let provider = CGDataProvider(data: data)!
+        let info = CGBitmapInfo.byteOrder32Little.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue))
+        let image = CGImage(
+            width: n, height: n, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: n * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: info,
+            provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent
+        )!
+        linenCache[key] = image
+        return image
+    }
+
+    private static var linenCache: [String: CGImage] = [:]
 
     private static func drawRays(_ cg: CGContext, window: CGRect, cushion: CGRect, day: Bool, time: Float) {
         cg.saveGState()
@@ -209,7 +229,7 @@ enum ScenePainter {
         octaves: Int
     ) -> (rgb: SIMD3<Float>, a: Float) {
         let sample = CatAnatomy.sample(local, pose: pose)
-        let fringe = 0.012 * coat.furLength
+        let fringe = 0.018 * coat.furLength
         if sample.sdf > fringe { return (.zero, 0) }
         let groomed = groom.sample(local: local)
         var fur = sample.grain + groomed.flow * 1.2
@@ -217,25 +237,31 @@ enum ScenePainter {
         if fl > 1e-4 { fur /= fl }
         let along = simd_dot(local, fur)
         let across = simd_dot(local, SIMD2(-fur.y, fur.x))
-        let micro = FurNoise.fbm(local * 6.2, octaves: octaves)
-        let grain = FurNoise.value(SIMD2(along * 16, across * 42))
-        let fiber = 0.93 + 0.09 * (micro - 0.5) + 0.05 * (grain - 0.5)
-        let alb = CoatColor.albedo(coat, p: local, region: sample.region, along: along)
-        let amb: SIMD3<Float> = sceneDay ? SIMD3(0.58, 0.50, 0.44) : SIMD3(0.32, 0.36, 0.50)
-        let key: SIMD3<Float> = sceneDay ? SIMD3(1.02, 0.95, 0.84) : SIMD3(0.58, 0.66, 0.92)
-        let inside = CoatColor.smooth(-sample.sdf, 0, 0.05)
-        let yy = local.y / (0.16 * pose.widthScale)
-        let xx = (local.x - 0.02) / 0.46
+        let clump = FurNoise.fbm(local * 3.4, octaves: octaves)
+        let strand = FurNoise.value(SIMD2(along * 11, across * 36))
+        let fine = FurNoise.value(SIMD2(along * 23, across * 78))
+        let fiber = 0.88 + 0.12 * (clump - 0.5) + 0.08 * (strand - 0.5) + 0.05 * (fine - 0.5)
+        var alb = CoatColor.albedo(coat, p: local, region: sample.region, along: along)
+        alb *= 0.92 + 0.16 * clump
+        let amb: SIMD3<Float> = sceneDay ? SIMD3(0.52, 0.44, 0.38) : SIMD3(0.26, 0.30, 0.44)
+        let key: SIMD3<Float> = sceneDay ? SIMD3(1.05, 0.96, 0.84) : SIMD3(0.55, 0.64, 0.92)
+        let inside = CoatColor.smooth(-sample.sdf, 0, 0.06)
+        let yy = local.y / (0.15 * pose.widthScale)
+        let xx = (local.x - 0.02) / 0.42
         let spine = exp(-(yy * yy)) * exp(-(xx * xx))
-        var col = alb * (amb + key * (0.42 + 0.45 * inside)) * fiber
-        let sheen: SIMD3<Float> = sceneDay ? SIMD3(1, 0.96, 0.86) : SIMD3(0.78, 0.84, 1)
-        col += sheen * spine * (sceneDay ? 0.20 : 0.12)
+        var col = alb * (amb + key * (0.38 + 0.55 * inside)) * fiber
+        let sheen: SIMD3<Float> = sceneDay ? SIMD3(1, 0.95, 0.84) : SIMD3(0.75, 0.82, 1)
+        let satin = spine * (0.65 + 0.35 * strand)
+        col += sheen * satin * (sceneDay ? 0.32 : 0.18)
         let part = groomed.part
-        col *= 1 - 0.34 * part
-        let lipD = (part - 0.48) / 0.18
-        col += exp(-(lipD * lipD)) * 0.06
-        if local.y > 0 { col *= 0.94 + 0.06 * CoatColor.smooth(0.15 - local.y, 0, 0.15) }
-        col = SIMD3(1 - exp(-col.x * 1.08), 1 - exp(-col.y * 1.08), 1 - exp(-col.z * 1.08))
+        let under = alb * SIMD3<Float>(0.62, 0.56, 0.50)
+        col = col * (1 - part * 0.55) + under * part * 0.35
+        let lipD = (part - 0.42) / 0.16
+        col += sheen * exp(-(lipD * lipD)) * 0.10
+        let rim = 1 - CoatColor.smooth(-sample.sdf, 0.0, 0.045)
+        col += sheen * rim * (sceneDay ? 0.12 : 0.08)
+        if local.y > 0 { col *= 0.90 + 0.10 * CoatColor.smooth(0.18 - local.y, 0, 0.18) }
+        col = SIMD3(1 - exp(-col.x * 1.12), 1 - exp(-col.y * 1.12), 1 - exp(-col.z * 1.12))
         let alpha = min(1, max(0, 1 - sample.sdf / fringe))
         return (col, alpha)
     }

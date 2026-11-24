@@ -18,6 +18,8 @@ jobs:
           [ -n "$XC" ] || { echo NO_XCODE_26; exit 1; }
           sudo xcode-select -s "$XC"
           xcodebuild -version
+      - name: Install Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
       - run: brew install xcodegen && xcodegen generate
       - name: ASC API key
         env:

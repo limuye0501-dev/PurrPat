@@ -148,8 +148,8 @@ static void catSDF(float2 p, constant Uniforms &u, thread float &sdf, thread int
     torso = smin(torso, rump, 0.11);
     torso = smin(torso, neck, 0.09);
     float head = sdEllipse(p, float2(-0.56 - headShift, 0.015), float2(0.168, 0.140));
-    float earL = sdEllipse(p, float2(-0.64 - headShift, -0.155 + u.breathEarStretch.y * 0.05), float2(0.055, 0.105));
-    float earR = sdEllipse(p, float2(-0.50 - headShift, 0.160 + u.breathEarStretch.z * 0.05), float2(0.050, 0.098));
+    float earL = sdEllipse(p, float2(-0.62 - headShift, -0.145 + u.breathEarStretch.y * 0.04), float2(0.070, 0.085));
+    float earR = sdEllipse(p, float2(-0.50 - headShift, 0.150 + u.breathEarStretch.z * 0.04), float2(0.065, 0.080));
     float earLI = sdEllipse(p, float2(-0.63 - headShift, -0.125), float2(0.022, 0.042));
     float earRI = sdEllipse(p, float2(-0.505 - headShift, 0.130), float2(0.020, 0.038));
     float s = u.breathEarStretch.w;
@@ -241,7 +241,7 @@ fragment float4 purrFragment(VOut in [[stage_in]],
     float sdf = 1.0; int region = 0; float2 grain = float2(1.0, 0.0);
     catSDF(local, u, sdf, region, grain);
     float furLength = max(u.extras.w, 0.5);
-    float fringe = 0.012 * furLength;
+    float fringe = 0.018 * furLength;
     if (sdf < fringe) {
         float2 uv = (local - u.groomRect.xy) / max(u.groomRect.zw, 1e-3);
         float4 g = groomTex.sample(smp, uv);
