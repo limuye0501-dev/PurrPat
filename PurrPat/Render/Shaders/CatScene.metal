@@ -120,7 +120,8 @@ fragment float4 purrFragment(VOut in [[stage_in]],
     fur += sheen * press * press * 0.14;
     if (night) fur = nightGrade(fur);
 
-    float alpha = smoothstep(0.04, 0.72, mask);
+    // The mask asset is already eroded and feathered. Hardening it redraws a jagged rim.
+    float alpha = saturate(mask);
     float blur = 0.0;
     blur += maskTex.sample(smp, uv + float2( 0.014, 0.0)).r;
     blur += maskTex.sample(smp, uv + float2(-0.014, 0.0)).r;

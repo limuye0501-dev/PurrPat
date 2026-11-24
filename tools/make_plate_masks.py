@@ -6,11 +6,10 @@ overhead pose) and run:
 
     python3 tools/make_plate_masks.py
 
-The script writes mask-<name>.png, a decontaminated plate-<name>.jpg, and a
-circular swatch-<name>.png. Calico is lit differently from the empty cushion,
-so it is segmented with a low-frequency lighting correction. Every matte is
-then eroded, feathered, and unmixed so the photo's own cushion cannot show
-as a pale cutout against cushion.jpg.
+The script writes mask-<name>.png, a rim-lit plate-<name>.jpg, and a circular
+swatch-<name>.png. The matte is a smoothed, eroded silhouette with a short
+feather. Edge pixels are relit to the shared cushion so a coat's own brighter
+fabric cannot show as a pale jagged outline.
 """
 
 import argparse
@@ -58,8 +57,8 @@ def segment_diff(cat: np.ndarray, empty: np.ndarray, core_t: float, fringe_t: fl
     distance = cv2.distanceTransform((1 - core).astype(np.uint8), cv2.DIST_L2, 3)
     fringe = ((distance > 0) & (distance <= fringe_px) & (diff > fringe_t)).astype(np.uint8)
     mask = largest(np.clip(core + fringe, 0, 1).astype(np.uint8))
-    mask = fill_small_holes(mask, 1200)
-    mask = cv2.erode(mask, small, iterations=1)
+    # Pale bellies fail the threshold but are enclosed by fur. The cushion itself touches the frame, so it is not filled.
+    mask = fill_small_holes(mask, 10**9)
     return largest(mask)
 
 
@@ -71,40 +70,60 @@ def lighting_diff(cat: np.ndarray, empty: np.ndarray, outside: np.ndarray) -> np
     weight = cv2.resize(outside.astype(np.float32), small, interpolation=cv2.INTER_AREA)
     gain = np.ones_like(cat_f)
     for channel in range(3):
-        num = cv2.GaussianBlur(cv2.resize(cat_f[:, :, channel] * outside, small, interpolation=cv2.INTER_AREA), (0, 0), 10)
-        den = cv2.GaussianBlur(cv2.resize(empty_f[:, :, channel] * outside, small, interpolation=cv2.INTER_AREA), (0, 0), 10)
-        blurred = cv2.GaussianBlur(weight, (0, 0), 10) + 1e-3
-        fitted = np.clip((num / blurred) / (den / blurred + 1e-3), 0.45, 2.4)
+        num = cv2.GaussianBlur(cv2.resize(cat_f[:, :, channel] * outside, small, interpolation=cv2.INTER_AREA), (0, 0), 8)
+        den = cv2.GaussianBlur(cv2.resize(empty_f[:, :, channel] * outside, small, interpolation=cv2.INTER_AREA), (0, 0), 8)
+        blurred = cv2.GaussianBlur(weight, (0, 0), 8) + 1e-3
+        fitted = np.clip((num / blurred) / (den / blurred + 1e-3), 0.5, 2.2)
         gain[:, :, channel] = cv2.resize(fitted, (width, height), interpolation=cv2.INTER_LINEAR)
     corrected = np.clip(empty_f * gain, 0, 255)
     return np.abs(cat_f - corrected).max(axis=2)
 
 
-def tighten_and_clean(plate: np.ndarray, cushion: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Erode, feather, and unmix the plate's own cushion out of the fur edge.
+def segment_calico(cat: np.ndarray, empty: np.ndarray, black_mask: np.ndarray) -> np.ndarray:
+    """Calico is lit brighter than cushion.jpg. Fit that light, then stay inside the shared pose."""
+    outside = cv2.dilate(black_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31))) == 0
+    diff = cv2.GaussianBlur(lighting_diff(cat, empty, outside.astype(np.float32)), (0, 0), 0.8)
+    raw = (diff > 40).astype(np.uint8)
+    small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    raw = cv2.morphologyEx(raw, cv2.MORPH_OPEN, small, iterations=1)
+    raw = cv2.morphologyEx(raw, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)), iterations=2)
+    raw = largest(fill_small_holes(raw, 10**9))
+    # One pixel of slack around the black pose. A wide dilation is what left the pale cushion ring.
+    allowed = cv2.dilate(black_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)), iterations=1)
+    return largest(cv2.bitwise_and(raw, allowed))
 
-    A hard pale silhouette is the photo's brighter cushion left inside the matte.
-    The rim is solved back to fur colour against that local background, then
-    stored over the shared cushion so a soft edge cannot reveal a second fabric.
-    """
-    binary = (mask > 0).astype(np.uint8)
+
+def refine(binary: np.ndarray, erode_px: int = 3, feather: float = 2.6) -> tuple[np.ndarray, np.ndarray]:
+    """Round the contour, drop the cushion fringe, and feather inside the fur."""
+    soft = cv2.GaussianBlur(binary.astype(np.float32), (0, 0), 2.2)
+    smooth = largest((soft > 0.55).astype(np.uint8))
+    smooth = fill_small_holes(smooth, 2000)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    core = largest(cv2.erode(binary, kernel, iterations=2))
-    if int(core.sum()) < 1000:
-        core = binary
-    soft = cv2.GaussianBlur(core.astype(np.float32), (0, 0), 1.6)
-    outside = cv2.distanceTransform((1 - core).astype(np.uint8), cv2.DIST_L2, 3)
-    soft = np.where(outside > 3.0, 0.0, soft)
-    soft = np.clip(soft * 1.25, 0.0, 1.0)
-    background = cv2.inpaint(plate, (core * 255).astype(np.uint8), 8, cv2.INPAINT_NS)
-    alpha = soft[..., None]
-    fur = (plate.astype(np.float32) - background.astype(np.float32) * (1.0 - alpha)) / np.maximum(alpha, 0.2)
-    fur = np.clip(fur, 0, 255)
-    depth = cv2.distanceTransform(core, cv2.DIST_L2, 3)
-    deep = np.clip((depth - 4.0) / 3.0, 0.0, 1.0)[..., None]
-    fur = fur * (1.0 - deep) + plate.astype(np.float32) * deep
-    cleaned = np.where(alpha > 0.02, fur, cushion.astype(np.float32))
-    return cleaned.astype(np.uint8), (soft * 255.0).astype(np.uint8)
+    tight = largest(cv2.erode(smooth, kernel, iterations=erode_px))
+    if int(tight.sum()) < 1000:
+        tight = smooth
+    distance = cv2.distanceTransform(tight, cv2.DIST_L2, 5)
+    alpha = np.clip(distance / feather, 0.0, 1.0)
+    # A sub-pixel blur removes the stair-step the distance field inherits from the grid.
+    alpha = cv2.GaussianBlur(alpha, (0, 0), 0.7)
+    alpha = np.where(cv2.distanceTransform((1 - tight).astype(np.uint8), cv2.DIST_L2, 3) > feather + 1.5, 0.0, alpha)
+    return tight, np.clip(alpha, 0.0, 1.0).astype(np.float32)
+
+
+def match_edge_light(plate: np.ndarray, cushion: np.ndarray, tight: np.ndarray, alpha: np.ndarray) -> np.ndarray:
+    """Relight the outer fur to the shared cushion, and replace the plate's own fabric outside the matte."""
+    distance = cv2.distanceTransform(tight, cv2.DIST_L2, 5)
+    background = cv2.inpaint(plate, (tight * 255).astype(np.uint8), 8, cv2.INPAINT_TELEA).astype(np.float32)
+    destination = cv2.GaussianBlur(cushion.astype(np.float32), (0, 0), 14)
+    source = cv2.GaussianBlur(background, (0, 0), 14) + 1.0
+    gain = np.clip(destination / source, 0.7, 1.15)
+    weight = np.clip((7.0 - distance) / 7.0, 0.0, 1.0) * (tight == 1)
+    fur = plate.astype(np.float32)
+    corrected = np.clip(fur * gain, 0, 255)
+    lit = fur * (1.0 - weight[..., None]) + corrected * weight[..., None]
+    # Anything the matte does not cover is the shared cushion, so a soft sample cannot reveal the plate fabric.
+    lit = np.where(alpha[..., None] > 0.01, lit, cushion.astype(np.float32))
+    return lit.astype(np.uint8)
 
 
 def swatch(plate: np.ndarray) -> np.ndarray:
@@ -131,36 +150,25 @@ def main() -> None:
     if not plates:
         raise SystemExit(f"no plate-*.jpg in {folder}")
 
-    black_path = folder / "plate-black.jpg"
-    black = cv2.imread(str(black_path)) if black_path.exists() else None
-    black_mask = segment_diff(black, empty, 46, 16, 6) if black is not None else None
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    allowed = cv2.dilate(black_mask, kernel, iterations=3) if black_mask is not None else None
-    core = cv2.erode(black_mask, kernel, iterations=1) if black_mask is not None else None
-    outside = cv2.dilate(black_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31))) == 0 if black_mask is not None else None
+    black = cv2.imread(str(folder / "plate-black.jpg"))
+    black_mask = segment_diff(black, empty, 46, 16, 4) if black is not None else None
 
     for path in plates:
         name = path.stem.removeprefix("plate-")
         cat = cv2.imread(str(path))
-        if name == "calico" and outside is not None:
-            diff = cv2.GaussianBlur(lighting_diff(cat, empty, outside), (0, 0), 0.8)
-            raw = (diff > 32).astype(np.uint8)
-            small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-            raw = cv2.morphologyEx(raw, cv2.MORPH_OPEN, small, iterations=1)
-            raw = cv2.morphologyEx(raw, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)), iterations=2)
-            raw = fill_small_holes(largest(raw), 2000)
-            mask = largest(fill_small_holes(raw, 1500))
+        if name == "calico" and black_mask is not None:
+            binary = segment_calico(cat, empty, black_mask)
         elif name in LIGHT:
-            mask = segment_diff(cat, empty, 26, 13, 5)
+            binary = segment_diff(cat, empty, 26, 13, 5)
         else:
-            mask = segment_diff(cat, empty, 40, 16, 5)
-        if allowed is not None and core is not None:
-            mask = largest(cv2.bitwise_or(cv2.bitwise_and(mask, allowed), core))
-        cleaned, alpha = tighten_and_clean(cat, empty, mask)
-        cv2.imwrite(str(folder / f"mask-{name}.png"), alpha)
+            binary = segment_diff(cat, empty, 40, 16, 5)
+        # Light fur is already close to the cloth, so erode less or the body opens up.
+        tight, alpha = refine(binary, erode_px=2 if name in LIGHT else 3)
+        cleaned = match_edge_light(cat, empty, tight, alpha)
+        cv2.imwrite(str(folder / f"mask-{name}.png"), (alpha * 255.0).astype(np.uint8))
         cv2.imwrite(str(folder / f"plate-{name}.jpg"), cleaned, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
         cv2.imwrite(str(folder / f"swatch-{name}.png"), swatch(cleaned))
-        print(f"{name:12} {(alpha > 16).mean():.3f}")
+        print(f"{name:12} {(alpha > 0.2).mean():.3f}")
 
 
 if __name__ == "__main__":

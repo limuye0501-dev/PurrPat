@@ -20,6 +20,11 @@ jobs:
           brew install xcodegen
           xcodegen generate
           python3 tools/patch_scheme_storekit.py
+      - name: Contact sheet
+        run: |
+          python3 -m pip install --user pillow
+          mkdir -p shots
+          python3 tools/contact_sheet.py shots/coats-contact.png
       - name: Capture
         run: |
           set -euo pipefail

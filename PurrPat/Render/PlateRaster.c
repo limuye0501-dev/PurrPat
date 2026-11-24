@@ -210,7 +210,9 @@ void plate_raster(
                     fur_g += 0.96f * press * press * 0.14f;
                     fur_b += 0.88f * press * press * 0.14f;
                 }
-                alpha = smoothf2(mask_v, 0.04f, 0.72f);
+                /* The mask asset is already eroded and feathered. A second smoothstep
+                   hardens that feather into a jagged pale step. */
+                alpha = clampf(mask_v, 0.0f, 1.0f);
                 occ = sample_r(mask, mask_w, mask_h, u + 0.014f, v);
                 occ += sample_r(mask, mask_w, mask_h, u - 0.014f, v);
                 occ += sample_r(mask, mask_w, mask_h, u, v + 0.014f);
