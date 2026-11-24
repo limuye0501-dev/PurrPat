@@ -7,8 +7,7 @@ final class ScreenshotTests: XCTestCase {
     }
 
     func testShots() throws {
-        let root = ProcessInfo.processInfo.environment["PURRPAT_SHOT_DIR"] ?? ""
-        try XCTSkipIf(root.isEmpty, "PURRPAT_SHOT_DIR is only set by the screenshot workflow")
+        let root = ProcessInfo.processInfo.environment["PURRPAT_SHOT_DIR"].flatMap { $0.isEmpty ? nil : $0 } ?? "/tmp/purrpat-shots"
         let directory = URL(fileURLWithPath: root, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 

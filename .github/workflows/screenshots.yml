@@ -31,13 +31,14 @@ jobs:
           print((pro or c)[-1]["udid"])
           ')
           echo "simulator $UDID"
-          mkdir -p shots
+          rm -rf /tmp/purrpat-shots
+          mkdir -p /tmp/purrpat-shots shots
           xcodebuild test -project PurrPat.xcodeproj -scheme PurrPatShots -configuration Debug \
             -destination "platform=iOS Simulator,id=$UDID" \
             -only-testing:PurrPatUITests/ScreenshotTests/testShots \
             -derivedDataPath DerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            TEST_RUNNER_PURRPAT_SHOT_DIR="$PWD/shots"
+            CODE_SIGNING_ALLOWED=NO
+          cp -R /tmp/purrpat-shots/. shots/
           python3 tools/check_shot.py shots
           # The stills prove the cat. Record the stroke only after the ginger cat is actually up.
           xcrun simctl boot "$UDID" || true
