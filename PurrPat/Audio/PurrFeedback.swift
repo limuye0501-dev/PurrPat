@@ -32,10 +32,13 @@ final class PurrFeedback {
     }
 
     func setActive(_ active: Bool) {
+        guard started else { return }
         if active {
-            try? audio.start()
+            if !audio.isRunning {
+                try? audio.start()
+            }
         } else {
-            audio.pause()
+            if audio.isRunning { audio.pause() }
             stopHaptics()
         }
     }

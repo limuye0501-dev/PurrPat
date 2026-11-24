@@ -38,6 +38,7 @@ struct PetScreen: View {
         .preferredColorScheme(settings.scene == .night ? .dark : .light)
         .onAppear(perform: appear)
         .onChange(of: scenePhase) { _, phase in
+            guard !DemoShot.underTest else { return }
             feedback.setActive(phase == .active)
         }
         .onChange(of: purchases.isPro) { _, pro in
