@@ -1,0 +1,58 @@
+{
+  "identifier" : "PurrPatStore",
+  "nonRenewingSubscriptions" : [ ],
+  "products" : [
+    {
+      "displayPrice" : "2.99",
+      "familyShareable" : true,
+      "internalID" : "6840000001",
+      "localizations" : [
+        {
+          "description" : "All coats, moonlight, rain, and sleeves. One time.",
+          "displayName" : "Purr Pat Pro",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "全部毛色、月色、雨声和袖口。一次买断。",
+          "displayName" : "撸猫 Pro",
+          "locale" : "zh_Hans"
+        },
+        {
+          "description" : "全部毛色、月色、雨聲和袖口。一次買斷。",
+          "displayName" : "擼貓 Pro",
+          "locale" : "zh_Hant"
+        },
+        {
+          "description" : "すべての毛色、月あかり、雨、袖。買い切り。",
+          "displayName" : "なで猫 Pro",
+          "locale" : "ja"
+        }
+      ],
+      "productID" : "com.limuye.purrpat.pro",
+      "referenceName" : "Purr Pat Pro",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      }
+    ]
+  },
+  "subscriptionGroups" : [ ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
