@@ -34,24 +34,44 @@ enum CatLayout {
     static let catMinY: CGFloat = 0.172
     static let catMaxY: CGFloat = 0.843
 
-    /// Places the plate so the cat has about 13% of cushion on each side and the tail sits above the coat bar.
+    /// Places the plate so the cat has about 13% of cushion on each side, the tail clears the coat bar, and the linen still covers the screen.
     static func fitRect(in size: CGSize, catSize: Float) -> CGRect {
         let zoom = CGFloat(min(1.2, max(0.85, catSize)))
         let margin: CGFloat = 0.135
         let catW = catMaxX - catMinX
         let catH = catMaxY - catMinY
         var scale = (size.width * (1 - 2 * margin) * zoom) / (CGFloat(plateWidth) * catW)
-        // On a wide screen the width rule would push the head or tail off. Fit the cat vertically too.
-        let maxCatHeight = size.height * 0.74
-        let verticalScale = maxCatHeight / (CGFloat(plateHeight) * catH)
+        let verticalScale = (size.height * 0.74) / (CGFloat(plateHeight) * catH)
         scale = min(scale, verticalScale)
-        let dw = CGFloat(plateWidth) * scale
-        let dh = CGFloat(plateHeight) * scale
+        var dw = CGFloat(plateWidth) * scale
+        var dh = CGFloat(plateHeight) * scale
         let catCenterX = (catMinX + catMaxX) / 2
-        let ox = size.width / 2 - catCenterX * dw
+        var ox = size.width / 2 - catCenterX * dw
         var oy = size.height * 0.78 - catMaxY * dh
+        let minHead = size.height * 0.06
+        if oy + catMinY * dh < minHead {
+            oy += minHead - (oy + catMinY * dh)
+        }
+        if oy + dh < size.height {
+            let room = size.height * 0.86 - (oy + catMaxY * dh)
+            let need = size.height - (oy + dh)
+            oy += min(need, max(0, room))
+        }
+        if oy > 0 { oy = 0 }
+        let gapTop = max(0, oy)
+        let gapBottom = max(0, size.height - (oy + dh))
+        let gapLeft = max(0, ox)
+        let gapRight = max(0, size.width - (ox + dw))
+        let extra = max(1, 1 + (gapTop + gapBottom) / dh, 1 + (gapLeft + gapRight) / dw)
+        if extra > 1.001 {
+            dw *= extra
+            dh *= extra
+            ox = size.width / 2 - catCenterX * dw
+            oy = size.height * 0.82 - catMaxY * dh
+            if oy > 0 { oy = 0 }
+            if oy + dh < size.height { oy = size.height - dh }
+        }
         let headY = oy + catMinY * dh
-        let minHead = size.height * 0.07
         if headY < minHead {
             oy += minHead - headY
         }

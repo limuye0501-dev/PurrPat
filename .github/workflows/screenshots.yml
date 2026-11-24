@@ -58,12 +58,13 @@ jobs:
           wait_shot() {
             local out="$1"
             local i bytes
-            for i in 1 2 3 4 5 6; do
+            for i in 1 2 3 4 5 6 7 8; do
               sleep 3
               limited 15 xcrun simctl io "$UDID" screenshot "$out" || true
               bytes=$(stat -f%z "$out" 2>/dev/null || echo 0)
               echo "$out attempt $i is $bytes bytes"
-              if [ "$bytes" -gt 180000 ]; then
+              # The chrome alone is a few hundred kilobytes. A real plate is over a megabyte.
+              if [ "$bytes" -gt 1200000 ]; then
                 return 0
               fi
             done
