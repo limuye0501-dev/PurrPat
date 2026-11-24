@@ -65,8 +65,9 @@ struct PetScreen: View {
         .sheet(isPresented: $showPaywall) {
             PaywallView()
                 .environmentObject(purchases)
-                .presentationDetents([.large])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .preferredColorScheme(.light)
         }
     }
 
@@ -148,7 +149,8 @@ struct PetScreen: View {
 
     private func heart(in size: CGSize) -> some View {
         let point = CatLayout.point(SIMD2(0.30, 0.38), in: size, catSize: settings.catSize)
-        let opacity = max(session.purrLevel * 0.65, max(0, (session.happiness - 0.28) * 1.35))
+        let lifted = max(0, session.happiness - 0.5)
+        let opacity = max(session.purrLevel * 0.75, lifted * 1.8)
         return Image(systemName: "heart.fill")
             .font(.system(size: 18, weight: .semibold))
             .foregroundStyle(Color(red: 0.86, green: 0.34, blue: 0.38))

@@ -210,14 +210,20 @@ void plate_raster(
                     fur_g += 0.96f * press * press * 0.14f;
                     fur_b += 0.88f * press * press * 0.14f;
                 }
-                alpha = smoothf2(mask_v, 0.12f, 0.62f);
-                occ = (sample_r(mask, mask_w, mask_h, u, v + 0.007f)
-                    + sample_r(mask, mask_w, mask_h, u + 0.004f, v + 0.009f)
-                    + sample_r(mask, mask_w, mask_h, u - 0.004f, v + 0.008f)) * 0.34f;
+                alpha = smoothf2(mask_v, 0.04f, 0.72f);
+                occ = sample_r(mask, mask_w, mask_h, u + 0.014f, v);
+                occ += sample_r(mask, mask_w, mask_h, u - 0.014f, v);
+                occ += sample_r(mask, mask_w, mask_h, u, v + 0.014f);
+                occ += sample_r(mask, mask_w, mask_h, u, v - 0.014f);
+                occ += sample_r(mask, mask_w, mask_h, u + 0.010f, v + 0.010f);
+                occ += sample_r(mask, mask_w, mask_h, u - 0.010f, v + 0.010f);
+                occ += sample_r(mask, mask_w, mask_h, u + 0.010f, v - 0.010f);
+                occ += sample_r(mask, mask_w, mask_h, u - 0.010f, v - 0.010f);
+                occ *= 0.125f;
                 shade = clampf(occ - alpha, 0.0f, 1.0f);
-                r *= 1.0f - shade * (night ? 0.42f : 0.26f);
-                g *= 1.0f - shade * (night ? 0.42f : 0.26f);
-                b *= 1.0f - shade * (night ? 0.42f : 0.26f);
+                r *= 1.0f - shade * 0.22f;
+                g *= 1.0f - shade * 0.22f;
+                b *= 1.0f - shade * 0.22f;
                 r = r * (1.0f - alpha) + fur_r * alpha;
                 g = g * (1.0f - alpha) + fur_g * alpha;
                 b = b * (1.0f - alpha) + fur_b * alpha;

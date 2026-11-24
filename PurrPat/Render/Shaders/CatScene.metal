@@ -120,12 +120,19 @@ fragment float4 purrFragment(VOut in [[stage_in]],
     fur += sheen * press * press * 0.14;
     if (night) fur = nightGrade(fur);
 
-    float alpha = smoothstep(0.12, 0.62, mask);
-    float occ = maskTex.sample(smp, uv + float2(0.0, 0.007)).r;
-    occ += maskTex.sample(smp, uv + float2(0.004, 0.009)).r;
-    occ += maskTex.sample(smp, uv + float2(-0.004, 0.008)).r;
-    float shade = saturate(occ * 0.34 - alpha);
-    bg *= 1.0 - shade * (night ? 0.42 : 0.26);
+    float alpha = smoothstep(0.04, 0.72, mask);
+    float blur = 0.0;
+    blur += maskTex.sample(smp, uv + float2( 0.014, 0.0)).r;
+    blur += maskTex.sample(smp, uv + float2(-0.014, 0.0)).r;
+    blur += maskTex.sample(smp, uv + float2(0.0,  0.014)).r;
+    blur += maskTex.sample(smp, uv + float2(0.0, -0.014)).r;
+    blur += maskTex.sample(smp, uv + float2( 0.010,  0.010)).r;
+    blur += maskTex.sample(smp, uv + float2(-0.010,  0.010)).r;
+    blur += maskTex.sample(smp, uv + float2( 0.010, -0.010)).r;
+    blur += maskTex.sample(smp, uv + float2(-0.010, -0.010)).r;
+    blur *= 0.125;
+    float shade = saturate(blur - alpha);
+    bg *= 1.0 - shade * 0.22;
     float3 col = mix(bg, fur, alpha);
 
     if (u.tailScene.z > 0.5) {
