@@ -96,9 +96,16 @@ final class GroomField {
             let i = iy * width + ix
             return (flow[i], part[i])
         }
-        let a = at(x0, y0), b = at(x1, y0), c = at(x0, y1), d = at(x1, y1)
-        let flowV = (a.0 * (1 - tx) + b.0 * tx) * (1 - ty) + (c.0 * (1 - tx) + d.0 * tx) * ty
-        let partV = (a.1 * (1 - tx) + b.1 * tx) * (1 - ty) + (c.1 * (1 - tx) + d.1 * tx) * ty
+        let a = at(x0, y0)
+        let b = at(x1, y0)
+        let c = at(x0, y1)
+        let d = at(x1, y1)
+        let top = a.0 * (1 - tx) + b.0 * tx
+        let bottom = c.0 * (1 - tx) + d.0 * tx
+        let flowV = top * (1 - ty) + bottom * ty
+        let partTop = a.1 * (1 - tx) + b.1 * tx
+        let partBottom = c.1 * (1 - tx) + d.1 * tx
+        let partV = partTop * (1 - ty) + partBottom * ty
         return (flowV, partV)
     }
 
