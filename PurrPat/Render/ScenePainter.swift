@@ -183,7 +183,7 @@ enum ScenePainter {
         var h = Int(rect.height * (interactive ? 1.25 : 2))
         // Keep the cat buffer small enough that a debug simulator finishes a frame
         // in a couple of seconds. The room behind it is drawn at full resolution.
-        let cap = interactive ? 70_000 : 260_000
+        let cap = interactive ? 50_000 : 140_000
         if w * h > cap {
             let f = sqrt(Double(cap) / Double(w * h))
             w = max(8, Int(Double(w) * f))
@@ -242,24 +242,23 @@ enum ScenePainter {
         if fl > 1e-4 { fur /= fl }
         let along = simd_dot(local, fur)
         let across = simd_dot(local, SIMD2(-fur.y, fur.x))
-        let clump = FurNoise.fbm(local * 3.1, octaves: octaves)
-        // Coarse enough to survive the screenshot scale, fine enough to read as hair.
-        let strand = FurNoise.value(SIMD2(along * 5.5, across * 16))
-        let fine = FurNoise.value(SIMD2(along * 9, across * 28))
-        let fiber = 0.72 + 0.20 * strand + 0.12 * fine + 0.08 * clump
+        let clump = FurNoise.fbm(local * 2.4, octaves: min(octaves, 2))
+        // A broken comb of hairs across the grain. The period is coarse on purpose
+        // so it still reads after the cat image is scaled up to the screen.
+        let hairs = 0.5 + 0.5 * sin(across * 70 + clump * 5)
+        let fiber = 0.55 + 0.45 * hairs
         var alb = CoatColor.albedo(coat, p: local, region: sample.region, along: along)
-        alb *= 0.84 + 0.28 * clump
-        let amb: SIMD3<Float> = sceneDay ? SIMD3(0.48, 0.40, 0.34) : SIMD3(0.22, 0.26, 0.40)
-        let key: SIMD3<Float> = sceneDay ? SIMD3(1.02, 0.94, 0.82) : SIMD3(0.52, 0.62, 0.90)
+        alb *= 0.9 + 0.15 * clump
+        let amb: SIMD3<Float> = sceneDay ? SIMD3(0.42, 0.36, 0.30) : SIMD3(0.20, 0.24, 0.36)
+        let key: SIMD3<Float> = sceneDay ? SIMD3(1.0, 0.93, 0.80) : SIMD3(0.50, 0.60, 0.88)
         let inside = CoatColor.smooth(-sample.sdf, 0, 0.06)
         let yy = local.y / (0.15 * pose.widthScale)
         let xx = (local.x - 0.02) / 0.42
         let spine = exp(-(yy * yy)) * exp(-(xx * xx))
-        var col = alb * (amb + key * (0.34 + 0.5 * inside)) * fiber
-        let sheen: SIMD3<Float> = sceneDay ? SIMD3(1, 0.94, 0.82) : SIMD3(0.72, 0.80, 1)
-        // Hair catches light on the crests and sinks into the gaps. Dark coats need the additive term.
-        col += sheen * spine * max(0, strand - 0.35) * (sceneDay ? 0.42 : 0.24)
-        col *= 0.78 + 0.34 * strand
+        var col = alb * (amb + key * (0.4 + 0.45 * inside))
+        let sheen: SIMD3<Float> = sceneDay ? SIMD3(1, 0.94, 0.82) : SIMD3(0.75, 0.82, 1)
+        col *= 0.58 + 0.62 * fiber
+        col += sheen * spine * hairs * (sceneDay ? 0.28 : 0.16)
         let part = groomed.part
         let under = alb * SIMD3<Float>(0.62, 0.56, 0.50)
         col = col * (1 - part * 0.55) + under * part * 0.35

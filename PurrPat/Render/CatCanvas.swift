@@ -40,6 +40,7 @@ final class CPUCatView: UIView {
     private var last: CFTimeInterval = 0
     private var renderingCat = false
     private var didPaintRoom = false
+    private var didFinishStill = false
 
     init(session: PetSession, settings: AppSettings) {
         self.session = session
@@ -76,6 +77,7 @@ final class CPUCatView: UIView {
 
     private func renderFrame(interactive: Bool) {
         guard bounds.width > 2, bounds.height > 2 else { return }
+        if session.isFrozen && didFinishStill { return }
         backgroundColor = settings.scene == .night
             ? UIColor(red: 0.07, green: 0.09, blue: 0.15, alpha: 1)
             : UIColor(red: 0.91, green: 0.84, blue: 0.75, alpha: 1)
@@ -111,6 +113,7 @@ final class CPUCatView: UIView {
                 self.layer.contentsScale = image.scale
                 self.layer.contents = image.cgImage
                 self.renderingCat = false
+                if !interactive { self.didFinishStill = true }
             }
         }
     }
