@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreHaptics
 import Foundation
+import os
 
 /// A 26 Hz purr you can hear (respecting the silent switch) and feel.
 final class PurrFeedback {

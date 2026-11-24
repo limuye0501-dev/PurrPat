@@ -1,3 +1,4 @@
+import CoreGraphics
 import simd
 
 /// Packed as float4s so the Swift layout matches CatScene.metal exactly.

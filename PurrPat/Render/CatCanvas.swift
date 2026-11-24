@@ -1,4 +1,5 @@
 import MetalKit
+import SwiftUI
 import UIKit
 
 enum RendererChoice {
@@ -133,7 +134,7 @@ final class MetalCatView: MTKView, MTKViewDelegate {
         accessibilityLabel = String(localized: "Stroke the cat")
     }
 
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
