@@ -65,7 +65,7 @@ final class CPUCatView: UIView {
         super.didMoveToWindow()
         link?.invalidate()
         link = nil
-        guard window != nil else { return }
+        guard window != nil, !DemoShot.underTest else { return }
         let link = CADisplayLink(target: self, selector: #selector(step))
         let cap: Float = session.isFrozen ? 15 : 30
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: cap, preferred: cap)

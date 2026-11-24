@@ -55,6 +55,31 @@ jobs:
             done
             return 0
           }
+          # Springboard's wallpaper is a large photo, so file size cannot tell it from the cat.
+          is_app() {
+            python3 - "$1" << 'PY'
+import struct, subprocess, sys
+src = sys.argv[1]
+bmp = "/tmp/purrpat-probe.bmp"
+subprocess.check_call(["sips", "-s", "format", "bmp", src, "--out", bmp], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+data = open(bmp, "rb").read()
+off = struct.unpack_from("<I", data, 10)[0]
+w, h = struct.unpack_from("<ii", data, 18)
+bpp = struct.unpack_from("<H", data, 28)[0] // 8
+row = (w * bpp + 3) & ~3
+def pix(x, y):
+    # BMP rows are bottom-up.
+    i = off + y * row + x * bpp
+    b, g, r = data[i], data[i + 1], data[i + 2]
+    return r, g, b
+cx, cy = w // 2, h // 2
+r, g, b = pix(cx, cy)
+# The home screen center is a bright cyan wallpaper. The cat and the paywall are not.
+springboard = (r + g + b) > 450 and b > r + 15
+print(f"center {r},{g},{b} springboard={springboard}")
+sys.exit(1 if springboard else 0)
+PY
+          }
           wait_shot() {
             local out="$1"
             local i bytes
@@ -63,12 +88,11 @@ jobs:
               limited 15 xcrun simctl io "$UDID" screenshot "$out" || true
               bytes=$(stat -f%z "$out" 2>/dev/null || echo 0)
               echo "$out attempt $i is $bytes bytes"
-              # The chrome alone is a few hundred kilobytes. A real plate is over a megabyte.
-              if [ "$bytes" -gt 1200000 ]; then
+              if [ "$bytes" -gt 200000 ] && is_app "$out"; then
                 return 0
               fi
             done
-            echo "$out stayed on the launch screen"
+            echo "$out never showed the app"
             return 0
           }
           for S in day night coats paywall; do
@@ -80,7 +104,7 @@ jobs:
           launch_shot stroke ""
           wait_shot shots/stroke-ready.png
           rm -f shots/stroke-ready.png
-          limited 20 xcrun simctl io "$UDID" recordVideo --force --codec h264 shots/stroke.mp4 &
+          xcrun simctl io "$UDID" recordVideo --force --codec h264 shots/stroke.mp4 &
           REC=$!
           sleep 7
           kill -INT $REC 2>/dev/null || true

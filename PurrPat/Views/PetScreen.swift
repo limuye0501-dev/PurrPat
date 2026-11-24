@@ -77,6 +77,7 @@ struct PetScreen: View {
             feedback.setPurr(enabled: enabled && settings.purrEnabled, level: Float(level))
         }
         session.onDelight = { feedback.playDelight() }
+        guard !DemoShot.underTest else { return }
         purchases.start()
         feedback.start()
         feedback.setRain(on: settings.rain)

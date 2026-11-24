@@ -13,6 +13,11 @@ enum DemoShot: String {
         ProcessInfo.processInfo.arguments.contains("-PurrPatCPU")
     }
 
+    /// The unit-test host launches the app. Skip the live render and audio so XCTest can attach.
+    static var underTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
     var showsPaywall: Bool { self == .paywall }
     var animates: Bool { self == .stroke }
     var frozen: Bool { self != .stroke }
