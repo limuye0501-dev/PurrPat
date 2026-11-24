@@ -14,7 +14,7 @@ final class PetSession: ObservableObject {
     @Published var happiness: Double = 0.32
     @Published var purrLevel: Double = 0
     @Published var handAnchor: CGPoint?
-    @Published var handAngle: CGFloat = -0.35
+    @Published var handAngle: CGFloat = 0
     @Published var handOpacity: Double = 0
     @Published var delightKind: Int = 0
 
@@ -76,7 +76,7 @@ final class PetSession: ObservableObject {
     func placeDemoHand(in bounds: CGSize, settings: AppSettings) {
         guard touching == false, let local = demoHandLocal else { return }
         handAnchor = CatLayout.point(local, in: bounds, catSize: settings.catSize)
-        handAngle = -0.4
+        handAngle = 0
         handOpacity = 1
     }
 
@@ -132,7 +132,8 @@ final class PetSession: ObservableObject {
                 let dx = point.x - (lastPoint?.x ?? point.x)
                 let dy = point.y - (lastPoint?.y ?? point.y)
                 if abs(dx) + abs(dy) > 0.5 {
-                    handAngle = max(-0.4, min(0.4, atan2(dy, dx) * 0.12))
+                    let sideways = max(-1, min(1, dx / max(8, hypot(dx, dy))))
+                    handAngle = sideways * 0.5
                 }
             }
         }
@@ -170,7 +171,7 @@ final class PetSession: ObservableObject {
             }
             lastLocal = local
             handAnchor = CatLayout.point(local, in: bounds, catSize: settings.catSize)
-            handAngle = -0.45
+            handAngle = 0.12
             handOpacity = 1
         } else if scriptContact {
             scriptContact = false

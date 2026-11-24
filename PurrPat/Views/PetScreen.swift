@@ -21,6 +21,8 @@ struct PetScreen: View {
                     .ignoresSafeArea()
                     .gesture(drag(in: size))
                 if settings.handEnabled, let anchor = session.handAnchor, session.handOpacity > 0.02 {
+                    handShadow(at: anchor, in: size)
+                        .opacity(session.handOpacity * 0.9)
                     hand(at: anchor, in: size)
                         .opacity(session.handOpacity)
                 }
@@ -97,21 +99,48 @@ struct PetScreen: View {
             }
     }
 
-    private func hand(at fingertip: CGPoint, in size: CGSize) -> some View {
-        let height = min(size.height * 0.20, 176)
-        let width = height * HandStyle.aspect
+    /// Palm about as wide as the cat's head, and always long enough that the sleeve leaves the bottom edge.
+    private func handMetrics(at fingertip: CGPoint, in size: CGSize) -> (width: CGFloat, height: CGFloat, center: CGPoint, angle: CGFloat) {
+        let fit = CatLayout.fitRect(in: size, catSize: settings.catSize)
+        let head = (CatLayout.catMaxX - CatLayout.catMinX) * 0.55 * fit.width
+        var width = head / HandStyle.knuckleFraction
+        var height = width / HandStyle.aspect
+        let reach = (size.height - fingertip.y + 48) / (1 - HandStyle.anchor.y)
+        if height < reach {
+            height = reach
+            width = height * HandStyle.aspect
+        }
         let anchor = HandStyle.anchor
         let center = CGPoint(
             x: fingertip.x - (anchor.x - 0.5) * width,
             y: fingertip.y - (anchor.y - 0.5) * height
         )
+        let angle = HandStyle.sleeveDown + session.handAngle
+        return (width, height, center, angle)
+    }
+
+    private func hand(at fingertip: CGPoint, in size: CGSize) -> some View {
+        let metrics = handMetrics(at: fingertip, in: size)
+        let anchor = HandStyle.anchor
         return Image(settings.handStyle.assetName)
             .resizable()
             .renderingMode(.original)
-            .frame(width: width, height: height)
-            .rotationEffect(.radians(session.handAngle), anchor: UnitPoint(x: anchor.x, y: anchor.y))
-            .shadow(color: .black.opacity(0.18), radius: 16, y: 10)
-            .position(center)
+            .frame(width: metrics.width, height: metrics.height)
+            .rotationEffect(.radians(metrics.angle), anchor: UnitPoint(x: anchor.x, y: anchor.y))
+            .position(metrics.center)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    private func handShadow(at fingertip: CGPoint, in size: CGSize) -> some View {
+        let metrics = handMetrics(at: fingertip, in: size)
+        let palm = metrics.width * HandStyle.knuckleFraction
+        return Ellipse()
+            .fill(Color.black.opacity(0.38))
+            .frame(width: palm * 1.25, height: palm * 0.42)
+            .blur(radius: palm * 0.18)
+            .rotationEffect(.radians(metrics.angle * 0.35))
+            .position(x: fingertip.x, y: fingertip.y + palm * 0.22)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }

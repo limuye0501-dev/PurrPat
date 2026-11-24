@@ -78,6 +78,10 @@ enum HandStyle: String, CaseIterable, Identifiable, Codable {
     /// Middle fingertip in the overlay image, unit coordinates. The wrist sits down-left of this point.
     static let anchor = CGPoint(x: 0.86, y: 0.02)
     static let aspect: CGFloat = 676.0 / 850.0
+    /// Knuckle span as a fraction of the overlay width. Sized to the cat's head.
+    static let knuckleFraction: CGFloat = 0.40
+    /// Clockwise turn that aims the sleeve down, off the bottom of the screen.
+    static let sleeveDown: CGFloat = 0.62
 }
 
 enum RoomScene: Int, Codable {

@@ -5,7 +5,7 @@ on:
 jobs:
   shots:
     runs-on: macos-15-intel
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Select latest Xcode
@@ -34,10 +34,10 @@ jobs:
           pro=[x for x in c if "Pro" in x["name"] and "Max" in x["name"]]
           print((pro or c)[-1]["udid"])
           ')
-          xcrun simctl boot "$UDID" || true
-          limited 180 xcrun simctl bootstatus "$UDID" -b || true
-          sleep 8
-          xcrun simctl status_bar "$UDID" override --time "9:41" --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100 || true
+          limited 60 xcrun simctl boot "$UDID" || true
+          limited 90 xcrun simctl bootstatus "$UDID" -b || true
+          sleep 5
+          limited 20 xcrun simctl status_bar "$UDID" override --time "9:41" --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100 || true
           APP=DerivedData/Build/Products/Debug-iphonesimulator/PurrPat.app
           xcrun simctl install "$UDID" "$APP"
           mkdir -p shots
@@ -45,28 +45,29 @@ jobs:
             local shot="$1"
             local extra="$2"
             local attempt
-            xcrun simctl terminate "$UDID" com.limuye.purrpat 2>/dev/null || true
+            limited 15 xcrun simctl terminate "$UDID" com.limuye.purrpat || true
             sleep 1
             for attempt in 1 2 3; do
-              if xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot "$shot" -PurrPatCPU $extra -AppleLanguages "(en)" -AppleLocale en_US; then
+              if limited 20 xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot "$shot" -PurrPatCPU $extra -AppleLanguages "(en)" -AppleLocale en_US; then
                 return 0
               fi
-              sleep 4
+              sleep 3
             done
             return 0
           }
           wait_shot() {
             local out="$1"
             local i bytes
-            for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            for i in 1 2 3 4 5 6; do
               sleep 3
-              xcrun simctl io "$UDID" screenshot "$out" || true
+              limited 15 xcrun simctl io "$UDID" screenshot "$out" || true
               bytes=$(stat -f%z "$out" 2>/dev/null || echo 0)
               echo "$out attempt $i is $bytes bytes"
               if [ "$bytes" -gt 180000 ]; then
                 return 0
               fi
             done
+            echo "$out stayed on the launch screen"
             return 0
           }
           for S in day night coats paywall; do
@@ -78,14 +79,15 @@ jobs:
           launch_shot stroke ""
           wait_shot shots/stroke-ready.png
           rm -f shots/stroke-ready.png
-          xcrun simctl io "$UDID" recordVideo --force --codec h264 shots/stroke.mp4 &
+          limited 20 xcrun simctl io "$UDID" recordVideo --force --codec h264 shots/stroke.mp4 &
           REC=$!
           sleep 7
           kill -INT $REC 2>/dev/null || true
-          for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+          for _ in 1 2 3 4 5 6 7 8; do
             kill -0 $REC 2>/dev/null || break
             sleep 1
           done
+          kill -KILL $REC 2>/dev/null || true
           wait $REC 2>/dev/null || true
           ls -lh shots || true
       - uses: actions/upload-artifact@v4

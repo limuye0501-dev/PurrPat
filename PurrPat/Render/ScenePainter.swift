@@ -68,12 +68,11 @@ enum ScenePainter {
         let cat = drawCat ? library.cat(coat) : cushion
         let mask = drawCat ? library.mask(coat) : PlateImage(width: 1, height: 1, rgba: [0, 0, 0, 255])
         let maps = groom.packed()
-        let zoom = min(1.2, max(0.85, catSize))
-        let fit = max(Float(width) / CatLayout.plateWidth, Float(height) / CatLayout.plateHeight) * zoom
-        let dw = CatLayout.plateWidth * fit
-        let dh = CatLayout.plateHeight * fit
-        let ox = (Float(width) - dw) * 0.5
-        let oy = (Float(height) - dh) * 0.5
+        let placed = CatLayout.fitRect(in: CGSize(width: width, height: height), catSize: catSize)
+        let dw = Float(placed.width)
+        let dh = Float(placed.height)
+        let ox = Float(placed.minX)
+        let oy = Float(placed.minY)
         let chubScale = 0.96 + pose.chub * 0.08
 
         pixels.withUnsafeMutableBytes { raw in

@@ -6,6 +6,7 @@ struct Uniforms {
     float4 motion;
     float4 tailScene;
     float4 groomRect;
+    float4 plateRect;
 };
 
 struct VOut {
@@ -94,13 +95,9 @@ fragment float4 purrFragment(VOut in [[stage_in]],
                              texture2d<float> maskTex [[texture(3)]]) {
     constexpr sampler smp(filter::linear, address::clamp_to_edge);
     float2 frag = in.position.xy;
-    float2 res = max(u.resTimeZoom.xy, float2(1.0));
-    float zoom = clamp(u.resTimeZoom.w, 0.85, 1.2);
-    float scale = max(res.x / 720.0, res.y / 1280.0) * zoom;
-    float dw = 720.0 * scale;
-    float dh = 1280.0 * scale;
-    float2 origin = (res - float2(dw, dh)) * 0.5;
-    float2 uv = (frag - origin) / float2(dw, dh);
+    float2 origin = u.plateRect.xy;
+    float2 span = max(u.plateRect.zw, float2(1.0));
+    float2 uv = (frag - origin) / span;
 
     bool night = u.tailScene.w > 0.5;
     float3 bg = cushionTex.sample(smp, uv).rgb;

@@ -7,6 +7,7 @@ struct CatUniforms {
     var motion = SIMD4<Float>(repeating: 0)
     var tailScene = SIMD4<Float>(repeating: 0)
     var groomRect = SIMD4<Float>(repeating: 0)
+    var plateRect = SIMD4<Float>(repeating: 0)
 
     @MainActor
     static func make(bounds: CGSize, contentScale: CGFloat, settings: AppSettings, session: PetSession) -> CatUniforms {
@@ -22,6 +23,8 @@ struct CatUniforms {
             settings.scene == .night ? 1 : 0
         )
         u.groomRect = SIMD4(session.groom.origin.x, session.groom.origin.y, session.groom.span.x, session.groom.span.y)
+        let fit = CatLayout.fitRect(in: bounds, catSize: settings.catSize)
+        u.plateRect = SIMD4(Float(fit.minX) * s, Float(fit.minY) * s, Float(fit.width) * s, Float(fit.height) * s)
         return u
     }
 }

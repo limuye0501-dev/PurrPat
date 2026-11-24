@@ -28,11 +28,33 @@ enum CatLayout {
         return SIMD2(Float(fit.width), Float(fit.height))
     }
 
+    /// Shared silhouette of every plate, in UV. Head at the top, tail curl at the bottom.
+    static let catMinX: CGFloat = 0.169
+    static let catMaxX: CGFloat = 0.778
+    static let catMinY: CGFloat = 0.172
+    static let catMaxY: CGFloat = 0.843
+
+    /// Places the plate so the cat has about 13% of cushion on each side and the tail sits above the coat bar.
     static func fitRect(in size: CGSize, catSize: Float) -> CGRect {
         let zoom = CGFloat(min(1.2, max(0.85, catSize)))
-        let scale = max(size.width / CGFloat(plateWidth), size.height / CGFloat(plateHeight)) * zoom
+        let margin: CGFloat = 0.135
+        let catW = catMaxX - catMinX
+        let catH = catMaxY - catMinY
+        var scale = (size.width * (1 - 2 * margin) * zoom) / (CGFloat(plateWidth) * catW)
+        // On a wide screen the width rule would push the head or tail off. Fit the cat vertically too.
+        let maxCatHeight = size.height * 0.74
+        let verticalScale = maxCatHeight / (CGFloat(plateHeight) * catH)
+        scale = min(scale, verticalScale)
         let dw = CGFloat(plateWidth) * scale
         let dh = CGFloat(plateHeight) * scale
-        return CGRect(x: (size.width - dw) / 2, y: (size.height - dh) / 2, width: max(dw, 1), height: max(dh, 1))
+        let catCenterX = (catMinX + catMaxX) / 2
+        let ox = size.width / 2 - catCenterX * dw
+        var oy = size.height * 0.78 - catMaxY * dh
+        let headY = oy + catMinY * dh
+        let minHead = size.height * 0.07
+        if headY < minHead {
+            oy += minHead - headY
+        }
+        return CGRect(x: ox, y: oy, width: max(dw, 1), height: max(dh, 1))
     }
 }
