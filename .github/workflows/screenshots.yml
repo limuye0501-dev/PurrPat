@@ -45,19 +45,23 @@ jobs:
             EXTRA=""
             if [ "$S" = "night" ]; then EXTRA="-PurrPatUnlock"; fi
             limited 30 xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot "$S" -PurrPatCPU $EXTRA -AppleLanguages "(en)" -AppleLocale en_US || true
-            sleep 14
+            sleep 8
             xcrun simctl io "$UDID" screenshot "shots/en-$S.png" || true
           done
           xcrun simctl terminate "$UDID" com.limuye.purrpat 2>/dev/null || true
           limited 30 xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot stroke -PurrPatCPU -AppleLanguages "(en)" -AppleLocale en_US || true
-          sleep 10
-          xcrun simctl io "$UDID" recordVideo --force shots/stroke.mp4 &
+          sleep 4
+          xcrun simctl io "$UDID" recordVideo --force --codec h264 shots/stroke.mp4 &
           REC=$!
           sleep 8
           kill -INT $REC 2>/dev/null || true
-          sleep 3
+          for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            kill -0 $REC 2>/dev/null || break
+            sleep 1
+          done
           kill -KILL $REC 2>/dev/null || true
           wait $REC 2>/dev/null || true
+          ls -lh shots || true
       - uses: actions/upload-artifact@v4
         with:
           name: screenshots

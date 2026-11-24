@@ -63,36 +63,54 @@ final class PlateLibrary {
     static let shared = PlateLibrary()
 
     let cushion: PlateImage
-    private let cats: [Coat: PlateImage]
-    private let masks: [Coat: PlateImage]
-    private let swatches: [Coat: UIImage]
+    private var cats: [Coat: PlateImage] = [:]
+    private var masks: [Coat: PlateImage] = [:]
+    private var swatches: [Coat: UIImage] = [:]
+    private let lock = NSLock()
+    private let bundle = Bundle(for: AppSettings.self)
 
-    func cat(_ coat: Coat) -> PlateImage { cats[coat] ?? cushion }
-    func mask(_ coat: Coat) -> PlateImage { masks[coat] ?? PlateImage(width: 1, height: 1, rgba: [0, 0, 0, 255]) }
-    func swatch(_ coat: Coat) -> UIImage { swatches[coat] ?? UIImage() }
+    func cat(_ coat: Coat) -> PlateImage {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = cats[coat] { return cached }
+        let image = load("plate-\(coat.assetName)", "jpg") ?? cushion
+        cats[coat] = image
+        return image
+    }
+
+    func mask(_ coat: Coat) -> PlateImage {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = masks[coat] { return cached }
+        let image = load("mask-\(coat.assetName)", "png") ?? PlateImage(width: 1, height: 1, rgba: [255, 255, 255, 255])
+        masks[coat] = image
+        return image
+    }
+
+    func swatch(_ coat: Coat) -> UIImage {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = swatches[coat] { return cached }
+        let image = bundle.url(forResource: "swatch-\(coat.assetName)", withExtension: "png")
+            .flatMap { UIImage(contentsOfFile: $0.path) } ?? UIImage()
+        swatches[coat] = image
+        return image
+    }
 
     private init() {
-        let bundle = Bundle(for: AppSettings.self)
-        func load(_ name: String, _ ext: String) -> PlateImage? {
-            guard let url = bundle.url(forResource: name, withExtension: ext) else { return nil }
-            guard let image = UIImage(contentsOfFile: url.path)?.cgImage else { return nil }
-            return PlateImage.decode(image)
+        if let url = Bundle(for: AppSettings.self).url(forResource: "cushion", withExtension: "jpg"),
+           let image = UIImage(contentsOfFile: url.path)?.cgImage,
+           let decoded = PlateImage.decode(image) {
+            cushion = decoded
+        } else {
+            cushion = .linen
         }
-        cushion = load("cushion", "jpg") ?? PlateImage.linen
-        var cats: [Coat: PlateImage] = [:]
-        var masks: [Coat: PlateImage] = [:]
-        var swatches: [Coat: UIImage] = [:]
-        for coat in Coat.allCases {
-            cats[coat] = load("plate-\(coat.assetName)", "jpg") ?? cushion
-            masks[coat] = load("mask-\(coat.assetName)", "png") ?? PlateImage(width: 1, height: 1, rgba: [255, 255, 255, 255])
-            if let url = bundle.url(forResource: "swatch-\(coat.assetName)", withExtension: "png"),
-               let image = UIImage(contentsOfFile: url.path) {
-                swatches[coat] = image
-            }
-        }
-        self.cats = cats
-        self.masks = masks
-        self.swatches = swatches
+    }
+
+    private func load(_ name: String, _ ext: String) -> PlateImage? {
+        guard let url = bundle.url(forResource: name, withExtension: ext) else { return nil }
+        guard let image = UIImage(contentsOfFile: url.path)?.cgImage else { return nil }
+        return PlateImage.decode(image)
     }
 }
 
