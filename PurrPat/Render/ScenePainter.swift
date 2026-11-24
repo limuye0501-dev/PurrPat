@@ -137,7 +137,7 @@ enum ScenePainter {
 
     private static func drawRays(_ cg: CGContext, window: CGRect, cushion: CGRect, day: Bool, time: Float) {
         cg.saveGState()
-        cg.setAlpha(day ? 0.22 : 0.10)
+        cg.setAlpha(day ? 0.10 : 0.06)
         cg.setFillColor((day ? UIColor(red: 1, green: 0.95, blue: 0.82, alpha: 1) : UIColor(red: 0.75, green: 0.82, blue: 1, alpha: 1)).cgColor)
         let drift = CGFloat(sin(time * 0.15)) * 12
         let beams: [(CGFloat, CGFloat)] = [(18, 54), (70, 36), (120, 70)]
@@ -183,7 +183,7 @@ enum ScenePainter {
         var h = Int(rect.height * (interactive ? 1.25 : 2))
         // Keep the cat buffer small enough that a debug simulator finishes a frame
         // in a couple of seconds. The room behind it is drawn at full resolution.
-        let cap = interactive ? 48_000 : 110_000
+        let cap = interactive ? 70_000 : 260_000
         if w * h > cap {
             let f = sqrt(Double(cap) / Double(w * h))
             w = max(8, Int(Double(w) * f))
@@ -242,22 +242,24 @@ enum ScenePainter {
         if fl > 1e-4 { fur /= fl }
         let along = simd_dot(local, fur)
         let across = simd_dot(local, SIMD2(-fur.y, fur.x))
-        let clump = FurNoise.fbm(local * 3.4, octaves: octaves)
-        let strand = FurNoise.value(SIMD2(along * 11, across * 36))
-        let fine = FurNoise.value(SIMD2(along * 23, across * 78))
-        let fiber = 0.88 + 0.12 * (clump - 0.5) + 0.08 * (strand - 0.5) + 0.05 * (fine - 0.5)
+        let clump = FurNoise.fbm(local * 3.1, octaves: octaves)
+        // Coarse enough to survive the screenshot scale, fine enough to read as hair.
+        let strand = FurNoise.value(SIMD2(along * 5.5, across * 16))
+        let fine = FurNoise.value(SIMD2(along * 9, across * 28))
+        let fiber = 0.72 + 0.20 * strand + 0.12 * fine + 0.08 * clump
         var alb = CoatColor.albedo(coat, p: local, region: sample.region, along: along)
-        alb *= 0.92 + 0.16 * clump
-        let amb: SIMD3<Float> = sceneDay ? SIMD3(0.52, 0.44, 0.38) : SIMD3(0.26, 0.30, 0.44)
-        let key: SIMD3<Float> = sceneDay ? SIMD3(1.05, 0.96, 0.84) : SIMD3(0.55, 0.64, 0.92)
+        alb *= 0.84 + 0.28 * clump
+        let amb: SIMD3<Float> = sceneDay ? SIMD3(0.48, 0.40, 0.34) : SIMD3(0.22, 0.26, 0.40)
+        let key: SIMD3<Float> = sceneDay ? SIMD3(1.02, 0.94, 0.82) : SIMD3(0.52, 0.62, 0.90)
         let inside = CoatColor.smooth(-sample.sdf, 0, 0.06)
         let yy = local.y / (0.15 * pose.widthScale)
         let xx = (local.x - 0.02) / 0.42
         let spine = exp(-(yy * yy)) * exp(-(xx * xx))
-        var col = alb * (amb + key * (0.38 + 0.55 * inside)) * fiber
-        let sheen: SIMD3<Float> = sceneDay ? SIMD3(1, 0.95, 0.84) : SIMD3(0.75, 0.82, 1)
-        let satin = spine * (0.65 + 0.35 * strand)
-        col += sheen * satin * (sceneDay ? 0.32 : 0.18)
+        var col = alb * (amb + key * (0.34 + 0.5 * inside)) * fiber
+        let sheen: SIMD3<Float> = sceneDay ? SIMD3(1, 0.94, 0.82) : SIMD3(0.72, 0.80, 1)
+        // Hair catches light on the crests and sinks into the gaps. Dark coats need the additive term.
+        col += sheen * spine * max(0, strand - 0.35) * (sceneDay ? 0.42 : 0.24)
+        col *= 0.78 + 0.34 * strand
         let part = groomed.part
         let under = alb * SIMD3<Float>(0.62, 0.56, 0.50)
         col = col * (1 - part * 0.55) + under * part * 0.35
@@ -279,7 +281,7 @@ enum ScenePainter {
         cg.setLineCap(.round)
         for side: Float in [-0.04, 0.038] {
             let c = CatLayout.toView(SIMD2(-0.655 - shift, side), in: bounds, catSize: catSize)
-            let s = CGFloat(CatLayout.scale(in: bounds, catSize: catSize)) * 0.05
+            let s = CGFloat(CatLayout.scale(in: bounds, catSize: catSize)) * 0.032
             let center = CGPoint(x: c.x, y: c.y - smile * 0.15)
             cg.addArc(center: center, radius: s, startAngle: .pi * 0.15, endAngle: .pi * 0.85, clockwise: true)
             cg.strokePath()

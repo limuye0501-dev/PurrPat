@@ -147,11 +147,11 @@ static void catSDF(float2 p, constant Uniforms &u, thread float &sdf, thread int
     torso = smin(torso, chest, 0.11);
     torso = smin(torso, rump, 0.11);
     torso = smin(torso, neck, 0.09);
-    float head = sdEllipse(p, float2(-0.56 - headShift, 0.015), float2(0.168, 0.140));
+    float head = sdEllipse(p, float2(-0.56 - headShift, 0.015), float2(0.182, 0.152));
     float earL = sdEllipse(p, float2(-0.62 - headShift, -0.145 + u.breathEarStretch.y * 0.04), float2(0.070, 0.085));
     float earR = sdEllipse(p, float2(-0.50 - headShift, 0.150 + u.breathEarStretch.z * 0.04), float2(0.065, 0.080));
-    float earLI = sdEllipse(p, float2(-0.63 - headShift, -0.125), float2(0.022, 0.042));
-    float earRI = sdEllipse(p, float2(-0.505 - headShift, 0.130), float2(0.020, 0.038));
+    float earLI = sdEllipse(p, float2(-0.62 - headShift, -0.12), float2(0.016, 0.026));
+    float earRI = sdEllipse(p, float2(-0.50 - headShift, 0.125), float2(0.014, 0.024));
     float s = u.breathEarStretch.w;
     float w = u.swayDelightHappyScene.x;
     float2 t0 = float2(0.36, 0.01);

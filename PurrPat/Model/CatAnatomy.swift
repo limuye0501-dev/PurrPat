@@ -47,11 +47,11 @@ enum CatAnatomy {
         torso = smin(torso, rump, 0.11)
         torso = smin(torso, neck, 0.09)
 
-        let head = sdEllipse(p, SIMD2(-0.56 - headShift, 0.015), SIMD2(0.168, 0.140))
+        let head = sdEllipse(p, SIMD2(-0.56 - headShift, 0.015), SIMD2(0.182, 0.152))
         let earL = sdEllipse(p, SIMD2(-0.62 - headShift, -0.145 + pose.earL * 0.04), SIMD2(0.070, 0.085))
         let earR = sdEllipse(p, SIMD2(-0.50 - headShift, 0.150 + pose.earR * 0.04), SIMD2(0.065, 0.080))
-        let earLI = sdEllipse(p, SIMD2(-0.63 - headShift, -0.125 + pose.earL * 0.04), SIMD2(0.022, 0.042))
-        let earRI = sdEllipse(p, SIMD2(-0.505 - headShift, 0.130 + pose.earR * 0.04), SIMD2(0.020, 0.038))
+        let earLI = sdEllipse(p, SIMD2(-0.62 - headShift, -0.12 + pose.earL * 0.03), SIMD2(0.016, 0.026))
+        let earRI = sdEllipse(p, SIMD2(-0.50 - headShift, 0.125 + pose.earR * 0.03), SIMD2(0.014, 0.024))
 
         let chain = tailPoints(pose)
         let radii: [Float] = [0.055 * (0.9 + 0.1 * ch), 0.044 * ch, 0.030 * ch, 0.016 * ch]
