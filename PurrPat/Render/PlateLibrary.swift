@@ -132,10 +132,24 @@ extension PlateImage {
                 space: space,
                 bitmapInfo: info.rawValue
             ) else { return false }
+            // Quartz draws upright into a bottom-left buffer. Flip so row 0 is the top of the photo.
             ctx.translateBy(x: 0, y: CGFloat(height))
             ctx.scaleBy(x: 1, y: -1)
             ctx.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            ctx.flush()
             return true
+        }
+        // The context flip above still leaves row 0 at the bottom of the photo on this path.
+        // Reverse the rows so the head (top of every plate) is row 0, matching screen v = 0.
+        let stride = width * 4
+        for y in 0..<(height / 2) {
+            let top = y * stride
+            let bottom = (height - 1 - y) * stride
+            for i in 0..<stride {
+                let tmp = rgba[top + i]
+                rgba[top + i] = rgba[bottom + i]
+                rgba[bottom + i] = tmp
+            }
         }
         guard ok else { return nil }
         return PlateImage(width: width, height: height, rgba: rgba)

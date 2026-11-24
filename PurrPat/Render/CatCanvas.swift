@@ -98,18 +98,6 @@ final class CPUCatView: UIView {
         let rain: Float = settings.rain ? 1 : 0
         let time = Float(session.time)
         let catSize = settings.catSize
-        if session.isFrozen {
-            let image = ScenePainter.render(
-                bounds: boundsSize, scale: scale, coat: coat, scene: scene, pose: pose,
-                groom: groom, rain: rain, time: time, catSize: catSize,
-                interactive: false, drawCat: true
-            )
-            layer.contentsScale = image.scale
-            layer.contents = image.cgImage
-            didFinishStill = true
-            didPaintRoom = true
-            return
-        }
         if !didPaintRoom {
             let room = ScenePainter.render(
                 bounds: boundsSize, scale: scale, coat: coat, scene: scene, pose: pose,
