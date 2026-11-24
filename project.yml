@@ -25,7 +25,7 @@ targets:
           - Info.plist
           - Products.storekit
       - path: PurrPat/Products.storekit
-        buildPhase: none
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID)
@@ -57,3 +57,30 @@ targets:
         DEVELOPMENT_TEAM: D53V28KTGW
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/PurrPat.app/PurrPat"
         BUNDLE_LOADER: "$(TEST_HOST)"
+  PurrPatUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [PurrPatUITests]
+    dependencies:
+      - target: PurrPat
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.limuye.purrpat.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: PurrPat
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: D53V28KTGW
+schemes:
+  PurrPatShots:
+    build:
+      targets:
+        PurrPat: all
+        PurrPatUITests: [test]
+    run:
+      config: Debug
+      storeKitConfiguration: PurrPat/Products.storekit
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - PurrPatUITests

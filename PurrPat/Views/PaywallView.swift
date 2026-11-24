@@ -48,6 +48,7 @@ struct PaywallView: View {
             .buttonStyle(.borderedProminent)
             .tint(button)
             .disabled(purchases.isBusy)
+            .accessibilityIdentifier("unlock-pro")
             Button("Restore purchases") {
                 Task { await purchases.restore() }
             }

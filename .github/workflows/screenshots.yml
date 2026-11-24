@@ -5,7 +5,7 @@ on:
 jobs:
   shots:
     runs-on: macos-15-intel
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - name: Select latest Xcode
@@ -15,18 +15,14 @@ jobs:
           xcodebuild -version
       - name: Install Metal toolchain
         run: xcodebuild -downloadComponent MetalToolchain
-      - run: brew install xcodegen && xcodegen generate
-      - name: Build
+      - name: Generate project
         run: |
-          set -o pipefail
-          xcodebuild build -project PurrPat.xcodeproj -scheme PurrPat -configuration Debug \
-            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log | tail -20
-          grep -q "BUILD SUCCEEDED" build.log
+          brew install xcodegen
+          xcodegen generate
+          python3 tools/patch_scheme_storekit.py
       - name: Capture
         run: |
-          set -uo pipefail
-          limited() { perl -e 'alarm shift; exec @ARGV' "$@"; }
+          set -euo pipefail
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json,sys
           d=json.load(sys.stdin)["devices"]
@@ -34,65 +30,47 @@ jobs:
           pro=[x for x in c if "Pro" in x["name"] and "Max" in x["name"]]
           print((pro or c)[-1]["udid"])
           ')
-          limited 60 xcrun simctl boot "$UDID" || true
-          limited 90 xcrun simctl bootstatus "$UDID" -b || true
-          sleep 5
-          limited 20 xcrun simctl status_bar "$UDID" override --time "9:41" --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100 || true
-          APP=DerivedData/Build/Products/Debug-iphonesimulator/PurrPat.app
-          xcrun simctl install "$UDID" "$APP"
+          echo "simulator $UDID"
           mkdir -p shots
-          launch_shot() {
-            local shot="$1"
-            local extra="$2"
-            local attempt
-            limited 15 xcrun simctl terminate "$UDID" com.limuye.purrpat || true
-            sleep 1
-            for attempt in 1 2 3; do
-              if limited 20 xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot "$shot" -PurrPatCPU $extra -AppleLanguages "(en)" -AppleLocale en_US; then
-                return 0
-              fi
-              sleep 3
-            done
-            return 0
-          }
-          # Springboard's wallpaper is a large photo, so file size cannot tell it from the cat.
-          is_app() { python3 tools/is_app_shot.py "$1"; }
-          wait_shot() {
-            local out="$1"
-            local i bytes
-            for i in 1 2 3 4 5 6 7 8; do
-              sleep 3
-              limited 15 xcrun simctl io "$UDID" screenshot "$out" || true
-              bytes=$(stat -f%z "$out" 2>/dev/null || echo 0)
-              echo "$out attempt $i is $bytes bytes"
-              if [ "$bytes" -gt 200000 ] && is_app "$out"; then
-                return 0
-              fi
-            done
-            echo "$out never showed the app"
-            return 0
-          }
-          for S in day night coats paywall; do
-            EXTRA=""
-            if [ "$S" = "night" ]; then EXTRA="-PurrPatUnlock"; fi
-            launch_shot "$S" "$EXTRA"
-            wait_shot "shots/en-$S.png"
+          xcodebuild test -project PurrPat.xcodeproj -scheme PurrPatShots -configuration Debug \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -only-testing:PurrPatUITests/ScreenshotTests/testShots \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            TEST_RUNNER_PURRPAT_SHOT_DIR="$PWD/shots"
+          python3 tools/check_shot.py shots
+          # The stills prove the cat. Record the stroke only after the ginger cat is actually up.
+          xcrun simctl boot "$UDID" || true
+          for _ in $(seq 1 24); do
+            xcrun simctl list devices | grep "$UDID" | grep -q Booted && break
+            sleep 5
           done
-          launch_shot stroke ""
-          wait_shot shots/stroke-ready.png
-          rm -f shots/stroke-ready.png
+          xcrun simctl list devices | grep "$UDID" | grep -q Booted
+          perl -e 'alarm 60; exec @ARGV' xcrun simctl terminate "$UDID" com.limuye.purrpat || true
+          perl -e 'alarm 90; exec @ARGV' xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot stroke -PurrPatCPU -AppleLanguages "(en)" -AppleLocale en_US
+          ready=0
+          for _ in $(seq 1 15); do
+            sleep 2
+            perl -e 'alarm 20; exec @ARGV' xcrun simctl io "$UDID" screenshot /tmp/stroke-probe.png
+            if python3 tools/check_shot.py /tmp/stroke-probe.png stroke; then
+              ready=1
+              break
+            fi
+          done
+          test "$ready" = 1
           xcrun simctl io "$UDID" recordVideo --force --codec h264 shots/stroke.mp4 &
           REC=$!
-          sleep 7
-          kill -INT $REC 2>/dev/null || true
-          for _ in 1 2 3 4 5 6 7 8; do
+          sleep 8
+          kill -INT $REC || true
+          for _ in $(seq 1 20); do
             kill -0 $REC 2>/dev/null || break
             sleep 1
           done
-          kill -KILL $REC 2>/dev/null || true
-          wait $REC 2>/dev/null || true
-          ls -lh shots || true
+          wait $REC || true
+          test -s shots/stroke.mp4
+          ls -lh shots
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: screenshots
           path: shots

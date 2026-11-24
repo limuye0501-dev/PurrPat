@@ -13,15 +13,24 @@ final class PurchaseManager: ObservableObject {
     private var product: Product?
     private var updates: Task<Void, Never>?
     private let unlockedByDemo: Bool
+    private let paywallShot: Bool
 
     init() {
-        unlockedByDemo = ProcessInfo.processInfo.arguments.contains("-PurrPatUnlock")
+        let args = ProcessInfo.processInfo.arguments
+        unlockedByDemo = args.contains("-PurrPatUnlock")
+        paywallShot = Self.argument("paywall", in: args)
         let cached = UserDefaults.standard.bool(forKey: "purrpat.isPro")
-        isPro = unlockedByDemo || cached
+        isPro = !paywallShot && (unlockedByDemo || cached)
+        if paywallShot {
+            displayPrice = Self.priceFromStoreKitFile()
+        }
     }
 
     func start() {
         guard updates == nil else { return }
+        if paywallShot, displayPrice == nil {
+            displayPrice = Self.priceFromStoreKitFile()
+        }
         updates = Task { [weak self] in
             guard let self else { return }
             for await update in Transaction.updates {
@@ -68,22 +77,50 @@ final class PurchaseManager: ObservableObject {
     }
 
     private func loadProduct() async {
-        do {
-            let found = try await Product.products(for: [Self.proProductID])
-            product = found.first
-            displayPrice = found.first?.displayPrice
-        } catch {
-            product = nil
+        let found = await Self.products(id: Self.proProductID)
+        product = found.first
+        if let price = found.first?.displayPrice {
+            displayPrice = price
+        } else if paywallShot, displayPrice == nil {
+            displayPrice = Self.priceFromStoreKitFile()
         }
-        #if DEBUG
-        if displayPrice == nil, ProcessInfo.processInfo.arguments.contains("paywall") {
-            displayPrice = "US$2.99"
+    }
+
+    /// StoreKit's product request has no timeout and never returns when the
+    /// configuration file is not attached. The screenshot cannot wait on that.
+    private static func products(id: String) async -> [Product] {
+        await withTaskGroup(of: [Product]?.self) { group in
+            group.addTask { try? await Product.products(for: [id]) }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first ?? []
         }
-        #endif
+    }
+
+    /// Reads the price out of the StoreKit configuration shipped with the app.
+    private static func priceFromStoreKitFile() -> String? {
+        guard let url = Bundle.main.url(forResource: "Products", withExtension: "storekit"),
+              let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let products = json["products"] as? [[String: Any]],
+              let price = products.first?["displayPrice"] as? String,
+              !price.isEmpty else { return nil }
+        if price.contains("$") || price.contains("¥") || price.contains("￥") { return price }
+        let storefront = (json["settings"] as? [String: Any])?["_storefront"] as? String
+        return storefront == "USA" ? "US$\(price)" : price
+    }
+
+    private static func argument(_ name: String, in args: [String]) -> Bool {
+        guard let index = args.firstIndex(of: "-PurrPatShot"), index + 1 < args.count else { return false }
+        return args[index + 1] == name
     }
 
     private func refresh() async {
-        if unlockedByDemo { return }
+        if unlockedByDemo || paywallShot { return }
         var pro = false
         for await result in Transaction.currentEntitlements {
             if let transaction = try? Self.check(result), transaction.productID == Self.proProductID {

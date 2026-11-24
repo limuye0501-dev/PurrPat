@@ -6,9 +6,11 @@ overhead pose) and run:
 
     python3 tools/make_plate_masks.py
 
-The script writes mask-<name>.png and a circular swatch-<name>.png.
-Calico is lit differently from the empty cushion, so it is segmented with a
-low-frequency lighting correction instead of a raw difference.
+The script writes mask-<name>.png, a decontaminated plate-<name>.jpg, and a
+circular swatch-<name>.png. Calico is lit differently from the empty cushion,
+so it is segmented with a low-frequency lighting correction. Every matte is
+then eroded, feathered, and unmixed so the photo's own cushion cannot show
+as a pale cutout against cushion.jpg.
 """
 
 import argparse
@@ -78,9 +80,31 @@ def lighting_diff(cat: np.ndarray, empty: np.ndarray, outside: np.ndarray) -> np
     return np.abs(cat_f - corrected).max(axis=2)
 
 
-def feather(mask: np.ndarray) -> np.ndarray:
-    soft = cv2.GaussianBlur(mask.astype(np.float32), (0, 0), 1.15)
-    return np.clip(soft * 1.4, 0, 1)
+def tighten_and_clean(plate: np.ndarray, cushion: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Erode, feather, and unmix the plate's own cushion out of the fur edge.
+
+    A hard pale silhouette is the photo's brighter cushion left inside the matte.
+    The rim is solved back to fur colour against that local background, then
+    stored over the shared cushion so a soft edge cannot reveal a second fabric.
+    """
+    binary = (mask > 0).astype(np.uint8)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    core = largest(cv2.erode(binary, kernel, iterations=2))
+    if int(core.sum()) < 1000:
+        core = binary
+    soft = cv2.GaussianBlur(core.astype(np.float32), (0, 0), 1.6)
+    outside = cv2.distanceTransform((1 - core).astype(np.uint8), cv2.DIST_L2, 3)
+    soft = np.where(outside > 3.0, 0.0, soft)
+    soft = np.clip(soft * 1.25, 0.0, 1.0)
+    background = cv2.inpaint(plate, (core * 255).astype(np.uint8), 8, cv2.INPAINT_NS)
+    alpha = soft[..., None]
+    fur = (plate.astype(np.float32) - background.astype(np.float32) * (1.0 - alpha)) / np.maximum(alpha, 0.2)
+    fur = np.clip(fur, 0, 255)
+    depth = cv2.distanceTransform(core, cv2.DIST_L2, 3)
+    deep = np.clip((depth - 4.0) / 3.0, 0.0, 1.0)[..., None]
+    fur = fur * (1.0 - deep) + plate.astype(np.float32) * deep
+    cleaned = np.where(alpha > 0.02, fur, cushion.astype(np.float32))
+    return cleaned.astype(np.uint8), (soft * 255.0).astype(np.uint8)
 
 
 def swatch(plate: np.ndarray) -> np.ndarray:
@@ -125,21 +149,18 @@ def main() -> None:
             raw = cv2.morphologyEx(raw, cv2.MORPH_OPEN, small, iterations=1)
             raw = cv2.morphologyEx(raw, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)), iterations=2)
             raw = fill_small_holes(largest(raw), 2000)
-            distance = cv2.distanceTransform((1 - raw).astype(np.uint8), cv2.DIST_L2, 3)
-            fringe = ((distance > 0) & (distance <= 5) & (diff > 20)).astype(np.uint8)
-            mask = largest(np.clip(raw + fringe, 0, 1).astype(np.uint8))
-            mask = cv2.erode(fill_small_holes(mask, 1500), small, iterations=1)
-            mask = largest(mask)
+            mask = largest(fill_small_holes(raw, 1500))
         elif name in LIGHT:
             mask = segment_diff(cat, empty, 26, 13, 5)
         else:
             mask = segment_diff(cat, empty, 40, 16, 5)
         if allowed is not None and core is not None:
             mask = largest(cv2.bitwise_or(cv2.bitwise_and(mask, allowed), core))
-        alpha = (feather(mask) * 255).astype(np.uint8)
+        cleaned, alpha = tighten_and_clean(cat, empty, mask)
         cv2.imwrite(str(folder / f"mask-{name}.png"), alpha)
-        cv2.imwrite(str(folder / f"swatch-{name}.png"), swatch(cat))
-        print(f"{name:12} {(mask > 0).mean():.3f}")
+        cv2.imwrite(str(folder / f"plate-{name}.jpg"), cleaned, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+        cv2.imwrite(str(folder / f"swatch-{name}.png"), swatch(cleaned))
+        print(f"{name:12} {(alpha > 16).mean():.3f}")
 
 
 if __name__ == "__main__":

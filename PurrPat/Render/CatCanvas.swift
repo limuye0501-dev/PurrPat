@@ -38,15 +38,18 @@ final class CPUCatView: UIView {
     var settings: AppSettings
     private var link: CADisplayLink?
     private var last: CFTimeInterval = 0
-    private var renderingCat = false
     private var didFinishStill = false
+    private var painting = false
+    private var renderingCat = false
 
     func note(_ settings: AppSettings) {
-        if self.settings.coat != settings.coat || self.settings.scene != settings.scene || self.settings.rain != settings.rain {
-            didFinishStill = false
-            renderingCat = false
-        }
+        let changed = self.settings.coat != settings.coat || self.settings.scene != settings.scene || self.settings.rain != settings.rain || self.settings.handEnabled != settings.handEnabled
         self.settings = settings
+        if changed {
+            didFinishStill = false
+            accessibilityIdentifier = "shot-pending"
+            setNeedsLayout()
+        }
     }
 
     init(session: PetSession, settings: AppSettings) {
@@ -61,14 +64,23 @@ final class CPUCatView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard window != nil, !DemoShot.underTest, session.isFrozen else { return }
+        paintStill()
+    }
+
     override func didMoveToWindow() {
         super.didMoveToWindow()
         link?.invalidate()
         link = nil
         guard window != nil, !DemoShot.underTest else { return }
+        if session.isFrozen {
+            paintStill()
+            return
+        }
         let link = CADisplayLink(target: self, selector: #selector(step))
-        let cap: Float = session.isFrozen ? 15 : 30
-        link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: cap, preferred: cap)
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
         link.add(to: .main, forMode: .common)
         self.link = link
     }
@@ -76,20 +88,22 @@ final class CPUCatView: UIView {
     deinit { link?.invalidate() }
 
     @objc private func step(_ link: CADisplayLink) {
+        guard !session.isFrozen else { return }
         let dt = last == 0 ? (1.0 / 30.0) : (link.timestamp - last)
         last = link.timestamp
         session.tick(dt: dt, bounds: bounds.size, settings: settings)
-        renderFrame(interactive: !session.isFrozen)
+        renderFrame(interactive: true)
     }
 
-    private func renderFrame(interactive: Bool) {
-        guard bounds.width > 2, bounds.height > 2 else { return }
-        if session.isFrozen && didFinishStill { return }
-        backgroundColor = settings.scene == .night
-            ? UIColor(red: 0.16, green: 0.22, blue: 0.32, alpha: 1)
-            : UIColor(red: 0.83, green: 0.78, blue: 0.70, alpha: 1)
+    /// Starts the frozen frame off the main thread and marks the view ready only once that frame is on screen.
+    private func paintStill() {
+        guard bounds.width > 2, bounds.height > 2, !didFinishStill, !painting else { return }
+        painting = true
+        if settings.handEnabled, session.handAnchor == nil {
+            session.placeDemoHand(in: bounds.size, settings: settings)
+        }
         let boundsSize = bounds.size
-        let scale = min(window?.screen.scale ?? 2, interactive ? 1 : 1.5)
+        let scale = min(window?.screen.scale ?? 2, 2)
         let coat = settings.coat
         let scene = settings.scene
         let pose = session.pose
@@ -97,7 +111,42 @@ final class CPUCatView: UIView {
         let rain: Float = settings.rain ? 1 : 0
         let time = Float(session.time)
         let catSize = settings.catSize
-        guard !renderingCat else { return }
+        backgroundColor = scene == .night
+            ? UIColor(red: 0.16, green: 0.22, blue: 0.32, alpha: 1)
+            : UIColor(red: 0.83, green: 0.78, blue: 0.70, alpha: 1)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let image = ScenePainter.render(
+                bounds: boundsSize, scale: scale, coat: coat, scene: scene, pose: pose,
+                groom: groom, rain: rain, time: time, catSize: catSize,
+                interactive: false, drawCat: true
+            )
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.painting = false
+                guard self.settings.coat == coat, self.settings.scene == scene else {
+                    self.paintStill()
+                    return
+                }
+                self.layer.contentsScale = image.scale
+                self.layer.contents = image.cgImage
+                guard self.matchesDemo else { return }
+                self.didFinishStill = true
+                self.accessibilityIdentifier = "shot-ready"
+            }
+        }
+    }
+
+    private func renderFrame(interactive: Bool) {
+        guard bounds.width > 2, bounds.height > 2, !renderingCat else { return }
+        let boundsSize = bounds.size
+        let scale = min(window?.screen.scale ?? 2, 1)
+        let coat = settings.coat
+        let scene = settings.scene
+        let pose = session.pose
+        let groom = session.groom.snapshot()
+        let rain: Float = settings.rain ? 1 : 0
+        let time = Float(session.time)
+        let catSize = settings.catSize
         renderingCat = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let image = ScenePainter.render(
@@ -110,9 +159,23 @@ final class CPUCatView: UIView {
                 self.layer.contentsScale = image.scale
                 self.layer.contents = image.cgImage
                 self.renderingCat = false
-                let current = self.settings.coat == coat && self.settings.scene == scene
-                if !interactive && current { self.didFinishStill = true }
             }
+        }
+    }
+
+    private var matchesDemo: Bool {
+        guard let shot = DemoShot.current else { return false }
+        switch shot {
+        case .day:
+            return settings.scene == .day && settings.coat == .black && settings.handEnabled && session.handAnchor != nil
+        case .night:
+            return settings.scene == .night && settings.coat == .black
+        case .coats:
+            return settings.scene == .day && settings.coat == .calico
+        case .paywall:
+            return settings.coat == .ginger
+        case .stroke:
+            return false
         }
     }
 }
