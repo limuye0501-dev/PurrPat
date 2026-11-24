@@ -13,7 +13,8 @@ enum ScenePainter {
         rain: Float,
         time: Float,
         catSize: Float,
-        interactive: Bool
+        interactive: Bool,
+        drawCat: Bool = true
     ) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
@@ -22,7 +23,7 @@ enum ScenePainter {
         return renderer.image { ctx in
             let cg = ctx.cgContext
             drawRoom(cg, bounds: bounds, scene: scene, time: time)
-            if let cat = catImage(bounds: bounds, coat: coat, scene: scene, pose: pose, groom: groom, catSize: catSize, interactive: interactive) {
+            if drawCat, let cat = catImage(bounds: bounds, coat: coat, scene: scene, pose: pose, groom: groom, catSize: catSize, interactive: interactive) {
                 cg.saveGState()
                 cg.setShadow(
                     offset: CGSize(width: 0, height: 14),
@@ -32,7 +33,9 @@ enum ScenePainter {
                 cat.image.draw(in: cat.rect)
                 cg.restoreGState()
             }
-            drawFace(cg, bounds: bounds, pose: pose, catSize: catSize, scene: scene)
+            if drawCat {
+                drawFace(cg, bounds: bounds, pose: pose, catSize: catSize, scene: scene)
+            }
             if rain > 0.4 {
                 drawRain(cg, bounds: bounds, time: time, night: scene == .night)
             }
@@ -178,7 +181,9 @@ enum ScenePainter {
         guard rect.width > 4, rect.height > 4 else { return nil }
         var w = Int(rect.width * (interactive ? 1.25 : 2))
         var h = Int(rect.height * (interactive ? 1.25 : 2))
-        let cap = interactive ? 220_000 : 1_000_000
+        // Keep the cat buffer small enough that a debug simulator finishes a frame
+        // in a couple of seconds. The room behind it is drawn at full resolution.
+        let cap = interactive ? 48_000 : 110_000
         if w * h > cap {
             let f = sqrt(Double(cap) / Double(w * h))
             w = max(8, Int(Double(w) * f))

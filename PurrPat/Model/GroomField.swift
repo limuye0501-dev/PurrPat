@@ -25,6 +25,14 @@ final class GroomField {
         partVelocity = Array(repeating: 0, count: n)
     }
 
+    /// A copy safe to sample on a background queue while touches keep writing this one.
+    func snapshot() -> GroomField {
+        let copy = GroomField(width: width, height: height)
+        copy.flow = flow
+        copy.part = part
+        return copy
+    }
+
     func clear() {
         let n = width * height
         flow = Array(repeating: .zero, count: n)

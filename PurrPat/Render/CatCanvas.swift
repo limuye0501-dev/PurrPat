@@ -38,6 +38,8 @@ final class CPUCatView: UIView {
     var settings: AppSettings
     private var link: CADisplayLink?
     private var last: CFTimeInterval = 0
+    private var renderingCat = false
+    private var didPaintRoom = false
 
     init(session: PetSession, settings: AppSettings) {
         self.session = session
@@ -74,24 +76,43 @@ final class CPUCatView: UIView {
 
     private func renderFrame(interactive: Bool) {
         guard bounds.width > 2, bounds.height > 2 else { return }
-        let scale = min(window?.screen.scale ?? 2, interactive ? 1.5 : 2)
-        let image = ScenePainter.render(
-            bounds: bounds.size,
-            scale: scale,
-            coat: settings.coat,
-            scene: settings.scene,
-            pose: session.pose,
-            groom: session.groom,
-            rain: settings.rain ? 1 : 0,
-            time: Float(session.time),
-            catSize: settings.catSize,
-            interactive: interactive
-        )
-        layer.contentsScale = image.scale
-        layer.contents = image.cgImage
         backgroundColor = settings.scene == .night
             ? UIColor(red: 0.07, green: 0.09, blue: 0.15, alpha: 1)
             : UIColor(red: 0.91, green: 0.84, blue: 0.75, alpha: 1)
+        let boundsSize = bounds.size
+        let scale = min(window?.screen.scale ?? 2, interactive ? 1.25 : 2)
+        let coat = settings.coat
+        let scene = settings.scene
+        let pose = session.pose
+        let groom = session.groom.snapshot()
+        let rain: Float = settings.rain ? 1 : 0
+        let time = Float(session.time)
+        let catSize = settings.catSize
+        if !didPaintRoom {
+            let room = ScenePainter.render(
+                bounds: boundsSize, scale: scale, coat: coat, scene: scene, pose: pose,
+                groom: groom, rain: rain, time: time, catSize: catSize,
+                interactive: true, drawCat: false
+            )
+            layer.contentsScale = room.scale
+            layer.contents = room.cgImage
+            didPaintRoom = true
+        }
+        guard !renderingCat else { return }
+        renderingCat = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let image = ScenePainter.render(
+                bounds: boundsSize, scale: scale, coat: coat, scene: scene, pose: pose,
+                groom: groom, rain: rain, time: time, catSize: catSize,
+                interactive: interactive, drawCat: true
+            )
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.layer.contentsScale = image.scale
+                self.layer.contents = image.cgImage
+                self.renderingCat = false
+            }
+        }
     }
 }
 
