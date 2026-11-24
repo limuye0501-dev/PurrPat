@@ -22,9 +22,10 @@ jobs:
           python3 tools/patch_scheme_storekit.py
       - name: Contact sheet
         run: |
-          python3 -m pip install --user pillow
+          python3 -m venv /tmp/purrpat-venv
+          /tmp/purrpat-venv/bin/pip install pillow
           mkdir -p shots
-          python3 tools/contact_sheet.py shots/coats-contact.png
+          /tmp/purrpat-venv/bin/python tools/contact_sheet.py shots/coats-contact.png
       - name: Capture
         run: |
           set -euo pipefail
