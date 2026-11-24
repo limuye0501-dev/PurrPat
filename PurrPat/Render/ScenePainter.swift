@@ -291,7 +291,8 @@ private func grade(_ c: SIMD3<Float>) -> SIMD3<Float> {
 }
 
 private func hash2(_ x: Int, _ y: Int) -> Float {
-    var n = UInt32(bitPattern: x &* 374761393 &+ y &* 668265263)
+    var n = UInt32(truncatingIfNeeded: x) &* 374761393
+    n = n &+ UInt32(truncatingIfNeeded: y) &* 668265263
     n = (n ^ (n >> 13)) &* 1274126177
     return Float(n & 0xFFFFFF) / Float(0xFFFFFF)
 }
