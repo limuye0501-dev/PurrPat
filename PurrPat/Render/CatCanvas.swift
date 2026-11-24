@@ -39,13 +39,12 @@ final class CPUCatView: UIView {
     private var link: CADisplayLink?
     private var last: CFTimeInterval = 0
     private var renderingCat = false
-    private var didPaintRoom = false
     private var didFinishStill = false
 
     func note(_ settings: AppSettings) {
         if self.settings.coat != settings.coat || self.settings.scene != settings.scene || self.settings.rain != settings.rain {
             didFinishStill = false
-            didPaintRoom = false
+            renderingCat = false
         }
         self.settings = settings
     }
@@ -90,7 +89,7 @@ final class CPUCatView: UIView {
             ? UIColor(red: 0.16, green: 0.22, blue: 0.32, alpha: 1)
             : UIColor(red: 0.83, green: 0.78, blue: 0.70, alpha: 1)
         let boundsSize = bounds.size
-        let scale = min(window?.screen.scale ?? 2, interactive ? 1.25 : 2)
+        let scale = min(window?.screen.scale ?? 2, interactive ? 1 : 1.5)
         let coat = settings.coat
         let scene = settings.scene
         let pose = session.pose
@@ -98,16 +97,6 @@ final class CPUCatView: UIView {
         let rain: Float = settings.rain ? 1 : 0
         let time = Float(session.time)
         let catSize = settings.catSize
-        if !didPaintRoom {
-            let room = ScenePainter.render(
-                bounds: boundsSize, scale: scale, coat: coat, scene: scene, pose: pose,
-                groom: groom, rain: rain, time: time, catSize: catSize,
-                interactive: true, drawCat: false
-            )
-            layer.contentsScale = room.scale
-            layer.contents = room.cgImage
-            didPaintRoom = true
-        }
         guard !renderingCat else { return }
         renderingCat = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in

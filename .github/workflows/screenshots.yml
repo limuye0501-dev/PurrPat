@@ -36,25 +36,34 @@ jobs:
           ')
           xcrun simctl boot "$UDID" || true
           limited 180 xcrun simctl bootstatus "$UDID" -b || true
+          sleep 8
           xcrun simctl status_bar "$UDID" override --time "9:41" --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100 || true
           APP=DerivedData/Build/Products/Debug-iphonesimulator/PurrPat.app
           xcrun simctl install "$UDID" "$APP"
           mkdir -p shots
-          for S in day night coats paywall; do
+          launch_shot() {
+            local shot="$1"
+            local extra="$2"
+            local attempt
             xcrun simctl terminate "$UDID" com.limuye.purrpat 2>/dev/null || true
             sleep 1
+            for attempt in 1 2 3; do
+              if xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot "$shot" -PurrPatCPU $extra -AppleLanguages "(en)" -AppleLocale en_US; then
+                return 0
+              fi
+              sleep 4
+            done
+            return 0
+          }
+          for S in day night coats paywall; do
             EXTRA=""
             if [ "$S" = "night" ]; then EXTRA="-PurrPatUnlock"; fi
-            limited 45 xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot "$S" -PurrPatCPU $EXTRA -AppleLanguages "(en)" -AppleLocale en_US \
-              || limited 45 xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot "$S" -PurrPatCPU $EXTRA -AppleLanguages "(en)" -AppleLocale en_US \
-              || true
-            sleep 8
+            launch_shot "$S" "$EXTRA"
+            sleep 12
             xcrun simctl io "$UDID" screenshot "shots/en-$S.png" || true
           done
-          xcrun simctl terminate "$UDID" com.limuye.purrpat 2>/dev/null || true
-          sleep 1
-          limited 45 xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot stroke -PurrPatCPU -AppleLanguages "(en)" -AppleLocale en_US || true
-          sleep 5
+          launch_shot stroke ""
+          sleep 6
           xcrun simctl io "$UDID" recordVideo --force --codec h264 shots/stroke.mp4 &
           REC=$!
           sleep 7

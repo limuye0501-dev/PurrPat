@@ -54,7 +54,7 @@ enum ScenePainter {
         var pixelScale = max(scale, 1)
         var width = max(1, Int((bounds.width * pixelScale).rounded()))
         var height = max(1, Int((bounds.height * pixelScale).rounded()))
-        let cap = interactive ? 900 : 2000
+        let cap = interactive ? 720 : 1280
         let longSide = max(width, height)
         if longSide > cap {
             let fit = Double(cap) / Double(longSide)
