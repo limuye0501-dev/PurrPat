@@ -25,7 +25,8 @@ jobs:
           grep -q "BUILD SUCCEEDED" build.log
       - name: Capture
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          limited() { perl -e 'alarm shift; exec @ARGV' "$@"; }
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json,sys
           d=json.load(sys.stdin)["devices"]
@@ -34,31 +35,29 @@ jobs:
           print((pro or c)[-1]["udid"])
           ')
           xcrun simctl boot "$UDID" || true
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl status_bar "$UDID" override --time "9:41" --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100
+          limited 180 xcrun simctl bootstatus "$UDID" -b || true
+          xcrun simctl status_bar "$UDID" override --time "9:41" --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100 || true
           APP=DerivedData/Build/Products/Debug-iphonesimulator/PurrPat.app
           xcrun simctl install "$UDID" "$APP"
           mkdir -p shots
-          for spec in "en en_US" "zh-Hans zh_CN"; do
-            set -- $spec
-            L=$1; loc=$2
-            for S in day night coats paywall; do
-              xcrun simctl terminate "$UDID" com.limuye.purrpat 2>/dev/null || true
-              EXTRA=""
-              if [ "$S" = "night" ]; then EXTRA="-PurrPatUnlock"; fi
-              xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot "$S" -PurrPatCPU $EXTRA -AppleLanguages "($L)" -AppleLocale "$loc"
-              sleep 16
-              xcrun simctl io "$UDID" screenshot "shots/${L}-${S}.png"
-            done
+          for S in day night coats paywall; do
+            xcrun simctl terminate "$UDID" com.limuye.purrpat 2>/dev/null || true
+            EXTRA=""
+            if [ "$S" = "night" ]; then EXTRA="-PurrPatUnlock"; fi
+            limited 30 xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot "$S" -PurrPatCPU $EXTRA -AppleLanguages "(en)" -AppleLocale en_US || true
+            sleep 14
+            xcrun simctl io "$UDID" screenshot "shots/en-$S.png" || true
           done
           xcrun simctl terminate "$UDID" com.limuye.purrpat 2>/dev/null || true
-          xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot stroke -PurrPatCPU -AppleLanguages "(en)" -AppleLocale en_US
-          sleep 12
+          limited 30 xcrun simctl launch "$UDID" com.limuye.purrpat -PurrPatShot stroke -PurrPatCPU -AppleLanguages "(en)" -AppleLocale en_US || true
+          sleep 10
           xcrun simctl io "$UDID" recordVideo --force shots/stroke.mp4 &
           REC=$!
-          sleep 10
-          kill -INT $REC || true
-          wait $REC || true
+          sleep 8
+          kill -INT $REC 2>/dev/null || true
+          sleep 3
+          kill -KILL $REC 2>/dev/null || true
+          wait $REC 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         with:
           name: screenshots
