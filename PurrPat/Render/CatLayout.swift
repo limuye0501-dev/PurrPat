@@ -2,38 +2,37 @@ import CoreGraphics
 import simd
 
 enum CatLayout {
-    static func cushionRect(in size: CGSize) -> CGRect {
-        let wide = size.width > size.height * 1.05
-        let marginX = wide ? max(28, (size.width - size.height * 0.78) / 2) : 16
-        let top = wide ? size.height * 0.08 : size.height * 0.145
-        let bottom = wide ? size.height * 0.08 : size.height * 0.02
-        return CGRect(x: marginX, y: top, width: max(1, size.width - marginX * 2), height: max(1, size.height - top - bottom))
+    /// Plate pixels. Every coat and the empty cushion share this frame.
+    static let plateWidth: Float = 720
+    static let plateHeight: Float = 1280
+
+    /// Aspect-fill UV for a point in a view. UV origin is the top-left of the plate, y down.
+    static func uv(_ point: CGPoint, in size: CGSize, catSize: Float) -> SIMD2<Float> {
+        let fit = fitRect(in: size, catSize: catSize)
+        let u = (Float(point.x) - Float(fit.minX)) / max(Float(fit.width), 1)
+        let v = (Float(point.y) - Float(fit.minY)) / max(Float(fit.height), 1)
+        return SIMD2(u, v)
     }
 
-    static func center(in size: CGSize) -> SIMD2<Float> {
-        let r = cushionRect(in: size)
-        return SIMD2(Float(r.minX + r.width * 0.48), Float(r.minY + r.height * 0.42))
+    static func point(_ uv: SIMD2<Float>, in size: CGSize, catSize: Float) -> CGPoint {
+        let fit = fitRect(in: size, catSize: catSize)
+        return CGPoint(
+            x: fit.minX + CGFloat(uv.x) * fit.width,
+            y: fit.minY + CGFloat(uv.y) * fit.height
+        )
     }
 
-    /// Points (or pixels, if `size` is in pixels) per local unit.
-    static func scale(in size: CGSize, catSize: Float) -> Float {
-        let r = cushionRect(in: size)
-        return Float(min(r.width, r.height)) * 0.54 * catSize
+    /// Points per unit of plate UV, x then y. Stroke speed is measured in points.
+    static func pointsPerUV(in size: CGSize, catSize: Float) -> SIMD2<Float> {
+        let fit = fitRect(in: size, catSize: catSize)
+        return SIMD2(Float(fit.width), Float(fit.height))
     }
 
-    static func toLocal(_ point: CGPoint, in size: CGSize, catSize: Float) -> SIMD2<Float> {
-        let c = center(in: size)
-        let s = scale(in: size, catSize: catSize)
-        return SIMD2((Float(point.x) - c.x) / s, (Float(point.y) - c.y) / s)
-    }
-
-    static func toView(_ local: SIMD2<Float>, in size: CGSize, catSize: Float) -> CGPoint {
-        let c = center(in: size)
-        let s = scale(in: size, catSize: catSize)
-        return CGPoint(x: CGFloat(c.x + local.x * s), y: CGFloat(c.y + local.y * s))
-    }
-
-    static func windowRect(in size: CGSize) -> CGRect {
-        CGRect(x: 0, y: 0, width: size.width * 0.52, height: size.height * 0.21)
+    static func fitRect(in size: CGSize, catSize: Float) -> CGRect {
+        let zoom = CGFloat(min(1.2, max(0.85, catSize)))
+        let scale = max(size.width / CGFloat(plateWidth), size.height / CGFloat(plateHeight)) * zoom
+        let dw = CGFloat(plateWidth) * scale
+        let dh = CGFloat(plateHeight) * scale
+        return CGRect(x: (size.width - dw) / 2, y: (size.height - dh) / 2, width: max(dw, 1), height: max(dh, 1))
     }
 }

@@ -16,7 +16,7 @@ struct PaywallView: View {
                 .font(.title3)
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 16) {
-                feature("paintpalette", "Thirteen coats")
+                feature("paintpalette", "Seven more coats")
                 feature("moon.stars", "Moonlight and rain")
                 feature("hand.raised", "Other sleeves")
             }

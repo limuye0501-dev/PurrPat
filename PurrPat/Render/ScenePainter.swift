@@ -16,314 +16,291 @@ enum ScenePainter {
         interactive: Bool,
         drawCat: Bool = true
     ) -> UIImage {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = scale
-        format.opaque = true
-        let renderer = UIGraphicsImageRenderer(size: bounds, format: format)
-        return renderer.image { ctx in
-            let cg = ctx.cgContext
-            drawRoom(cg, bounds: bounds, scene: scene, time: time)
-            if drawCat, let cat = catImage(bounds: bounds, coat: coat, scene: scene, pose: pose, groom: groom, catSize: catSize, interactive: interactive) {
-                cg.saveGState()
-                cg.setShadow(
-                    offset: CGSize(width: 0, height: 14),
-                    blur: 22,
-                    color: UIColor.black.withAlphaComponent(scene == .day ? 0.20 : 0.40).cgColor
-                )
-                cat.image.draw(in: cat.rect)
-                cg.restoreGState()
-            }
-            if drawCat {
-                drawFace(cg, bounds: bounds, pose: pose, catSize: catSize, scene: scene)
-            }
-            if rain > 0.4 {
-                drawRain(cg, bounds: bounds, time: time, night: scene == .night)
-            }
+        var pixelScale = max(scale, 1)
+        var width = max(1, Int((bounds.width * pixelScale).rounded()))
+        var height = max(1, Int((bounds.height * pixelScale).rounded()))
+        let cap = interactive ? 1000 : 1440
+        let longSide = max(width, height)
+        if longSide > cap {
+            let fit = Double(cap) / Double(longSide)
+            width = max(1, Int((Double(width) * fit).rounded()))
+            height = max(1, Int((Double(height) * fit).rounded()))
+            pixelScale = bounds.height > 1 ? CGFloat(height) / bounds.height : pixelScale
         }
-    }
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let library = PlateLibrary.shared
+        let cushion = library.cushion
+        let cat = library.cat(coat)
+        let mask = library.mask(coat)
+        let maps = groom.packed()
+        let night = scene == .night
+        let zoom = min(1.2, max(0.85, catSize))
+        let fit = max(Float(width) / CatLayout.plateWidth, Float(height) / CatLayout.plateHeight) * zoom
+        let dw = CatLayout.plateWidth * fit
+        let dh = CatLayout.plateHeight * fit
+        let ox = (Float(width) - dw) * 0.5
+        let oy = (Float(height) - dh) * 0.5
 
-    private static func drawRoom(_ cg: CGContext, bounds: CGSize, scene: RoomScene, time: Float) {
-        let day = scene == .day
-        let top = day ? UIColor(red: 0.91, green: 0.84, blue: 0.75, alpha: 1) : UIColor(red: 0.12, green: 0.15, blue: 0.24, alpha: 1)
-        let bottom = day ? UIColor(red: 0.84, green: 0.75, blue: 0.64, alpha: 1) : UIColor(red: 0.07, green: 0.09, blue: 0.15, alpha: 1)
-        let colors = [top.cgColor, bottom.cgColor] as CFArray
-        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
-            cg.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: bounds.height), options: [])
-        }
-
-        let window = CatLayout.windowRect(in: bounds)
-        cg.saveGState()
-        let winPath = UIBezierPath(roundedRect: window, cornerRadius: 18)
-        winPath.addClip()
-        let skyTop = day ? UIColor(red: 1, green: 0.96, blue: 0.90, alpha: 1) : UIColor(red: 0.10, green: 0.14, blue: 0.28, alpha: 1)
-        let skyBot = day ? UIColor(red: 1, green: 0.86, blue: 0.70, alpha: 1) : UIColor(red: 0.05, green: 0.07, blue: 0.14, alpha: 1)
-        if let sky = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [skyTop.cgColor, skyBot.cgColor] as CFArray, locations: [0, 1]) {
-            cg.drawLinearGradient(sky, start: window.origin, end: CGPoint(x: window.minX, y: window.maxY), options: [])
-        }
-        if !day {
-            cg.setFillColor(UIColor(red: 0.93, green: 0.94, blue: 0.88, alpha: 0.95).cgColor)
-            cg.fillEllipse(in: CGRect(x: window.maxX - 92, y: 28, width: 54, height: 54))
-        }
-        cg.setFillColor((day ? UIColor(white: 0.98, alpha: 0.55) : UIColor(red: 0.65, green: 0.70, blue: 0.78, alpha: 0.28)).cgColor)
-        let folds = 7
-        let foldW = min(72, window.width * 0.22) / CGFloat(folds)
-        for i in 0..<folds {
-            let shade: CGFloat = i % 2 == 0 ? 1 : 0.82
-            cg.setAlpha(shade)
-            cg.fill(CGRect(x: window.minX + CGFloat(i) * foldW, y: window.minY, width: foldW + 0.5, height: window.height))
-        }
-        cg.restoreGState()
-
-        let cushion = CatLayout.cushionRect(in: bounds)
-        let cushColor = day
-            ? UIColor(red: 0.84, green: 0.77, blue: 0.67, alpha: 1)
-            : UIColor(red: 0.24, green: 0.27, blue: 0.36, alpha: 1)
-        let cushPath = UIBezierPath(roundedRect: cushion, cornerRadius: 36)
-        cg.saveGState()
-        cg.addPath(cushPath.cgPath)
-        cg.setFillColor(cushColor.cgColor)
-        cg.fillPath()
-        cg.addPath(cushPath.cgPath)
-        cg.clip()
-        drawWeave(cg, rect: cushion, day: day)
-        drawRays(cg, window: window, cushion: cushion, day: day, time: time)
-        cg.restoreGState()
-        cg.addPath(cushPath.cgPath)
-        cg.setStrokeColor((day ? UIColor(red: 0.72, green: 0.64, blue: 0.52, alpha: 0.45) : UIColor(white: 1, alpha: 0.08)).cgColor)
-        cg.setLineWidth(10)
-        cg.strokePath()
-    }
-
-    private static func drawWeave(_ cg: CGContext, rect: CGRect, day: Bool) {
-        cg.saveGState()
-        cg.setAlpha(day ? 0.07 : 0.05)
-        cg.draw(linenTile(day: day), in: rect)
-        cg.restoreGState()
-    }
-
-    /// A soft irregular linen, generated once. A ruled grid reads as graph paper, not cloth.
-    private static func linenTile(day: Bool) -> CGImage {
-        let key = day ? "day" : "night"
-        if let cached = linenCache[key] { return cached }
-        let n = 96
-        var px = [UInt8](repeating: 0, count: n * n * 4)
-        for y in 0..<n {
-            for x in 0..<n {
-                let p = SIMD2(Float(x) / 9.0, Float(y) / 9.0)
-                let v = FurNoise.fbm(p, octaves: 3)
-                let thread = 0.5 + 0.5 * sin(Float(x) * 0.85 + v * 2) * sin(Float(y) * 0.8)
-                let tone = min(1, max(0, 0.35 + 0.4 * v + 0.25 * thread))
-                let o = (y * n + x) * 4
-                let b = UInt8(tone * 255)
-                px[o] = b
-                px[o + 1] = b
-                px[o + 2] = b
-                px[o + 3] = 255
-            }
-        }
-        let data = Data(px) as CFData
-        let provider = CGDataProvider(data: data)!
-        let info = CGBitmapInfo.byteOrder32Little.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue))
-        let image = CGImage(
-            width: n, height: n, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: n * 4,
-            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: info,
-            provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent
-        )!
-        linenCache[key] = image
-        return image
-    }
-
-    private static var linenCache: [String: CGImage] = [:]
-
-    private static func drawRays(_ cg: CGContext, window: CGRect, cushion: CGRect, day: Bool, time: Float) {
-        cg.saveGState()
-        cg.setAlpha(day ? 0.10 : 0.06)
-        cg.setFillColor((day ? UIColor(red: 1, green: 0.95, blue: 0.82, alpha: 1) : UIColor(red: 0.75, green: 0.82, blue: 1, alpha: 1)).cgColor)
-        let drift = CGFloat(sin(time * 0.15)) * 12
-        let beams: [(CGFloat, CGFloat)] = [(18, 54), (70, 36), (120, 70)]
-        for (x, width) in beams {
-            let path = UIBezierPath()
-            let x0 = window.minX + x + drift
-            path.move(to: CGPoint(x: x0, y: window.maxY - 8))
-            path.addLine(to: CGPoint(x: x0 + width, y: window.maxY - 8))
-            path.addLine(to: CGPoint(x: x0 + width + 160, y: cushion.maxY))
-            path.addLine(to: CGPoint(x: x0 + 70, y: cushion.maxY))
-            path.close()
-            cg.addPath(path.cgPath)
-            cg.fillPath()
-        }
-        cg.restoreGState()
-    }
-
-    private struct CatLayer {
-        var image: UIImage
-        var rect: CGRect
-    }
-
-    private static func catImage(
-        bounds: CGSize,
-        coat: Coat,
-        scene: RoomScene,
-        pose: CatPose,
-        groom: GroomField,
-        catSize: Float,
-        interactive: Bool
-    ) -> CatLayer? {
-        let minL = SIMD2<Float>(-0.92, -0.48)
-        let maxL = SIMD2<Float>(1.05 + pose.tailStretch * 0.35, 0.48)
-        let a = CatLayout.toView(minL, in: bounds, catSize: catSize)
-        let b = CatLayout.toView(maxL, in: bounds, catSize: catSize)
-        var rect = CGRect(
-            x: min(a.x, b.x), y: min(a.y, b.y),
-            width: abs(a.x - b.x), height: abs(a.y - b.y)
-        ).insetBy(dx: -6, dy: -6)
-        rect = rect.intersection(CGRect(origin: .zero, size: bounds).insetBy(dx: -20, dy: -20))
-        guard rect.width > 4, rect.height > 4 else { return nil }
-        var w = Int(rect.width * (interactive ? 1.25 : 2))
-        var h = Int(rect.height * (interactive ? 1.25 : 2))
-        // Keep the cat buffer small enough that a debug simulator finishes a frame
-        // in a couple of seconds. The room behind it is drawn at full resolution.
-        let cap = interactive ? 50_000 : 140_000
-        if w * h > cap {
-            let f = sqrt(Double(cap) / Double(w * h))
-            w = max(8, Int(Double(w) * f))
-            h = max(8, Int(Double(h) * f))
-        }
-        var pixels = [UInt8](repeating: 0, count: w * h * 4)
-        let center = CatLayout.center(in: bounds)
-        let sc = CatLayout.scale(in: bounds, catSize: catSize)
-        let octaves = interactive ? 2 : 3
-        let day = scene == .day
         pixels.withUnsafeMutableBytes { raw in
-            let buf = raw.bindMemory(to: UInt8.self)
-            for y in 0..<h {
-                for x in 0..<w {
-                    let px = Float(rect.minX) + (Float(x) + 0.5) / Float(w) * Float(rect.width)
-                    let py = Float(rect.minY) + (Float(y) + 0.5) / Float(h) * Float(rect.height)
-                    let local = SIMD2((px - center.x) / sc, (py - center.y) / sc)
-                    let shaded = shade(local: local, coat: coat, sceneDay: day, pose: pose, groom: groom, octaves: octaves)
-                    let alpha = min(1, max(0, shaded.a))
-                    let o = (y * w + x) * 4
-                    let ia = UInt8(alpha * 255)
-                    buf[o] = UInt8(min(255, max(0, shaded.rgb.z * alpha * 255)))
-                    buf[o + 1] = UInt8(min(255, max(0, shaded.rgb.y * alpha * 255)))
-                    buf[o + 2] = UInt8(min(255, max(0, shaded.rgb.x * alpha * 255)))
-                    buf[o + 3] = ia
+            guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
+            cushion.rgba.withUnsafeBufferPointer { cushionPx in
+                cat.rgba.withUnsafeBufferPointer { catPx in
+                    mask.rgba.withUnsafeBufferPointer { maskPx in
+                        maps.flowX.withUnsafeBufferPointer { fx in
+                            maps.flowY.withUnsafeBufferPointer { fy in
+                                maps.part.withUnsafeBufferPointer { part in
+                                    fill(
+                                        base: base, width: width, height: height,
+                                        cushion: cushionPx.baseAddress, cushionW: cushion.width, cushionH: cushion.height,
+                                        cat: catPx.baseAddress, catW: cat.width, catH: cat.height,
+                                        mask: maskPx.baseAddress, maskW: mask.width, maskH: mask.height,
+                                        flowX: fx.baseAddress, flowY: fy.baseAddress, part: part.baseAddress,
+                                        groomW: maps.width, groomH: maps.height,
+                                        ox: ox, oy: oy, dw: dw, dh: dh,
+                                        pose: pose, night: night, rain: rain > 0.5, time: time,
+                                        drawCat: drawCat
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-        let data = Data(pixels)
-        guard let provider = CGDataProvider(data: data as CFData) else { return nil }
-        let info = CGBitmapInfo.byteOrder32Little.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue))
-        guard let image = CGImage(
-            width: w, height: h,
-            bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: info,
-            provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent
-        ) else { return nil }
-        return CatLayer(image: UIImage(cgImage: image), rect: rect)
-    }
 
-    private static func shade(
-        local: SIMD2<Float>,
-        coat: Coat,
-        sceneDay: Bool,
-        pose: CatPose,
-        groom: GroomField,
-        octaves: Int
-    ) -> (rgb: SIMD3<Float>, a: Float) {
-        let sample = CatAnatomy.sample(local, pose: pose)
-        let fringe = 0.018 * coat.furLength
-        if sample.sdf > fringe { return (.zero, 0) }
-        let groomed = groom.sample(local: local)
-        var fur = sample.grain + groomed.flow * 1.2
-        let fl = simd_length(fur)
-        if fl > 1e-4 { fur /= fl }
-        let along = simd_dot(local, fur)
-        let across = simd_dot(local, SIMD2(-fur.y, fur.x))
-        let clump = FurNoise.fbm(local * 2.4, octaves: min(octaves, 2))
-        // A broken comb of hairs across the grain. The period is coarse on purpose
-        // so it still reads after the cat image is scaled up to the screen.
-        let hairs = 0.5 + 0.5 * sin(across * 70 + clump * 5)
-        let fiber = 0.55 + 0.45 * hairs
-        var alb = CoatColor.albedo(coat, p: local, region: sample.region, along: along)
-        alb *= 0.9 + 0.15 * clump
-        let amb: SIMD3<Float> = sceneDay ? SIMD3(0.42, 0.36, 0.30) : SIMD3(0.20, 0.24, 0.36)
-        let key: SIMD3<Float> = sceneDay ? SIMD3(1.0, 0.93, 0.80) : SIMD3(0.50, 0.60, 0.88)
-        let inside = CoatColor.smooth(-sample.sdf, 0, 0.06)
-        let yy = local.y / (0.15 * pose.widthScale)
-        let xx = (local.x - 0.02) / 0.42
-        let spine = exp(-(yy * yy)) * exp(-(xx * xx))
-        var col = alb * (amb + key * (0.4 + 0.45 * inside))
-        let sheen: SIMD3<Float> = sceneDay ? SIMD3(1, 0.94, 0.82) : SIMD3(0.75, 0.82, 1)
-        col *= 0.58 + 0.62 * fiber
-        col += sheen * spine * hairs * (sceneDay ? 0.28 : 0.16)
-        let part = groomed.part
-        let under = alb * SIMD3<Float>(0.62, 0.56, 0.50)
-        col = col * (1 - part * 0.55) + under * part * 0.35
-        let lipD = (part - 0.42) / 0.16
-        col += sheen * exp(-(lipD * lipD)) * 0.10
-        let rim = 1 - CoatColor.smooth(-sample.sdf, 0.0, 0.045)
-        col += sheen * rim * (sceneDay ? 0.12 : 0.08)
-        if local.y > 0 { col *= 0.90 + 0.10 * CoatColor.smooth(0.18 - local.y, 0, 0.18) }
-        col = SIMD3(1 - exp(-col.x * 1.12), 1 - exp(-col.y * 1.12), 1 - exp(-col.z * 1.12))
-        let alpha = min(1, max(0, 1 - sample.sdf / fringe))
-        return (col, alpha)
-    }
-
-    private static func drawFace(_ cg: CGContext, bounds: CGSize, pose: CatPose, catSize: Float, scene: RoomScene) {
-        let shift: Float = pose.delightKind == 1 ? pose.delight * 0.035 : 0
-        let smile: CGFloat = pose.delightKind == 0 ? 0 : CGFloat(pose.delight) * 4
-        cg.setStrokeColor(UIColor(red: 0.18, green: 0.12, blue: 0.10, alpha: 0.85).cgColor)
-        cg.setLineWidth(max(1.2, bounds.width * 0.004))
-        cg.setLineCap(.round)
-        for side: Float in [-0.04, 0.038] {
-            let c = CatLayout.toView(SIMD2(-0.655 - shift, side), in: bounds, catSize: catSize)
-            let s = CGFloat(CatLayout.scale(in: bounds, catSize: catSize)) * 0.032
-            let center = CGPoint(x: c.x, y: c.y - smile * 0.15)
-            cg.addArc(center: center, radius: s, startAngle: .pi * 0.15, endAngle: .pi * 0.85, clockwise: true)
-            cg.strokePath()
+        let space = CGColorSpaceCreateDeviceRGB()
+        let info = CGBitmapInfo.byteOrder32Big.union(CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let data = Data(pixels) as CFData
+        guard let provider = CGDataProvider(data: data),
+              let image = CGImage(
+                width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                space: space, bitmapInfo: info, provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent
+              ) else {
+            return UIImage()
         }
-        let nose = CatLayout.toView(SIMD2(-0.71 - shift, 0.012), in: bounds, catSize: catSize)
-        let nr = CGFloat(CatLayout.scale(in: bounds, catSize: catSize)) * 0.016
-        cg.setFillColor(UIColor(red: 0.55, green: 0.34, blue: 0.32, alpha: 0.9).cgColor)
-        cg.move(to: CGPoint(x: nose.x - nr, y: nose.y - nr * 0.2))
-        cg.addLine(to: CGPoint(x: nose.x + nr, y: nose.y - nr * 0.2))
-        cg.addLine(to: CGPoint(x: nose.x, y: nose.y + nr))
-        cg.closePath()
-        cg.fillPath()
-        cg.setStrokeColor(UIColor(white: 0.1, alpha: scene == .day ? 0.28 : 0.4).cgColor)
-        cg.setLineWidth(0.8)
-        for side: Float in [-1, 1] {
-            let origin = CatLayout.toView(SIMD2(-0.66 - shift, 0.012 + side * 0.03), in: bounds, catSize: catSize)
-            let len = CGFloat(CatLayout.scale(in: bounds, catSize: catSize)) * 0.18
-            for angle in [-0.5, -0.15, 0.2] as [CGFloat] {
-                let a = angle * CGFloat(side)
-                cg.move(to: origin)
-                cg.addLine(to: CGPoint(x: origin.x - cos(a) * len, y: origin.y + sin(a) * len * CGFloat(side)))
-                cg.strokePath()
-            }
-        }
-    }
-
-    private static func drawRain(_ cg: CGContext, bounds: CGSize, time: Float, night: Bool) {
-        let window = CatLayout.windowRect(in: bounds)
-        cg.saveGState()
-        cg.addPath(UIBezierPath(roundedRect: window, cornerRadius: 18).cgPath)
-        cg.clip()
-        cg.setStrokeColor(UIColor(white: night ? 0.85 : 0.55, alpha: 0.35).cgColor)
-        cg.setLineWidth(1.2)
-        cg.setLineCap(.round)
-        for i in 0..<22 {
-            let fi = Float(i)
-            let x = window.minX + CGFloat((fi * 37).truncatingRemainder(dividingBy: Float(window.width)))
-            let span = Float(window.height)
-            let y = window.minY + CGFloat((time * 48 + fi * 19).truncatingRemainder(dividingBy: span))
-            cg.move(to: CGPoint(x: x, y: y))
-            cg.addLine(to: CGPoint(x: x + 1.5, y: y + 12))
-        }
-        cg.strokePath()
-        cg.restoreGState()
+        return UIImage(cgImage: image, scale: pixelScale, orientation: .up)
     }
 }
+
+private func fill(
+    base: UnsafeMutablePointer<UInt8>,
+    width: Int,
+    height: Int,
+    cushion: UnsafePointer<UInt8>?,
+    cushionW: Int,
+    cushionH: Int,
+    cat: UnsafePointer<UInt8>?,
+    catW: Int,
+    catH: Int,
+    mask: UnsafePointer<UInt8>?,
+    maskW: Int,
+    maskH: Int,
+    flowX: UnsafePointer<Float>?,
+    flowY: UnsafePointer<Float>?,
+    part: UnsafePointer<Float>?,
+    groomW: Int,
+    groomH: Int,
+    ox: Float,
+    oy: Float,
+    dw: Float,
+    dh: Float,
+    pose: CatPose,
+    night: Bool,
+    rain: Bool,
+    time: Float,
+    drawCat: Bool
+) {
+    let breath = pose.breath
+    let earL = pose.earL
+    let earR = pose.earR
+    let chub = pose.chub
+    let stretch = pose.tailStretch
+    let sway = pose.tailSway
+    let wide = 0.96 + chub * 0.08
+    for y in 0..<height {
+        let row = y * width
+        let fy = Float(y) + 0.5
+        for x in 0..<width {
+            let fx = Float(x) + 0.5
+            let u = (fx - ox) / dw
+            let v = (fy - oy) / dh
+            var rgb = sampleRGB(cushion, cushionW, cushionH, u, v)
+            if night { rgb = grade(rgb) }
+            if drawCat {
+                let groom = sampleGroom(flowX, flowY, part, groomW, groomH, u, v)
+                let warped = warp(
+                    u, v, breath: breath, earL: earL, earR: earR, chubScale: wide,
+                    stretch: stretch, sway: sway, flow: groom.0, part: groom.1
+                )
+                var fur = sampleRGB(cat, catW, catH, warped.x, warped.y)
+                let maskV = sampleR(mask, maskW, maskH, warped.x, warped.y)
+                let detail = hash2(x &* 3, y &* 5)
+                let strand = hash2(x, y * 3 + 7)
+                let grain = 0.945 + 0.04 * detail + 0.035 * smooth(strand, 0.28, 0.75)
+                fur *= grain
+                let press = min(max(groom.1, 0), 1)
+                fur *= 1 - 0.22 * press
+                let sheen = night ? SIMD3<Float>(0.62, 0.70, 0.82) : SIMD3<Float>(1, 0.96, 0.88)
+                fur += sheen * press * press * 0.14
+                if night { fur = grade(fur) }
+                let alpha = smooth(maskV, 0.12, 0.62)
+                let occ = (
+                    sampleR(mask, maskW, maskH, u, v + 0.007)
+                        + sampleR(mask, maskW, maskH, u + 0.004, v + 0.009)
+                        + sampleR(mask, maskW, maskH, u - 0.004, v + 0.008)
+                ) * 0.34
+                let shade = min(max(occ - alpha, 0), 1)
+                rgb *= 1 - shade * (night ? 0.42 : 0.26)
+                rgb = rgb * (1 - alpha) + fur * alpha
+            }
+            if rain {
+                let drop = fract(fy * 0.016 - time * 0.32 + fx * 0.008)
+                var streak = smooth(drop, 0, 0.045) * (1 - smooth(drop, 0.045, 0.15))
+                let column = abs(fract(fx * 0.028) - 0.5)
+                streak *= 1 - smooth(column, 0, 0.42)
+                rgb += streak * (night ? 0.09 : 0.06)
+            }
+            rgb = simd_clamp(rgb, SIMD3(repeating: 0), SIMD3(repeating: 1))
+            let o = (row + x) * 4
+            base[o] = UInt8(rgb.x * 255)
+            base[o + 1] = UInt8(rgb.y * 255)
+            base[o + 2] = UInt8(rgb.z * 255)
+            base[o + 3] = 255
+        }
+    }
+}
+
+private func warp(
+    _ u: Float, _ v: Float,
+    breath: Float, earL: Float, earR: Float, chubScale: Float,
+    stretch: Float, sway: Float, flow: SIMD2<Float>, part: Float
+) -> SIMD2<Float> {
+    var x = 0.48 + (u - 0.48) / chubScale
+    var y = v
+    let dx = x - 0.48
+    let dy = y - 0.46
+    let bw = smooth(length2(dx / 0.20, dy / 0.18), 1.35, 0.2)
+    let breathScale = 1 - breath * 0.018 * bw
+    x = 0.48 + dx * breathScale
+    y = 0.46 + dy * breathScale
+    y += earL * earFalloff(x, y, 0.385, 0.218) * 0.012
+    y += earR * earFalloff(x, y, 0.575, 0.216) * 0.012
+    let tail = tailShift(x, y, stretch: stretch, sway: sway)
+    x += tail.x
+    y += tail.y
+    x -= flow.x * part * 0.014
+    y -= flow.y * part * 0.014
+    return SIMD2(x, y)
+}
+
+private func tailShift(_ x: Float, _ y: Float, stretch: Float, sway: Float) -> SIMD2<Float> {
+    let p = SIMD2(x, y)
+    let base = SIMD2<Float>(0.48, 0.63)
+    let mid = SIMD2<Float>(0.40 - sway * 0.25, 0.72)
+    let curl = SIMD2<Float>(0.31 - sway * 0.40, 0.775)
+    let tip = SIMD2<Float>(0.255 - sway * 0.20 - stretch * 0.03, 0.71 - stretch * 0.025)
+    let d0 = CatAnatomy.sdSegment(p, base, mid)
+    let d1 = CatAnatomy.sdSegment(p, mid, curl)
+    let d2 = CatAnatomy.sdSegment(p, curl, tip)
+    let d = min(d0, min(d1, d2))
+    let along: Float = d0 <= d1 && d0 <= d2 ? 0.25 : (d1 <= d2 ? 0.6 : 1)
+    let tw = smooth(d, 0.055, 0.01)
+    return SIMD2(sway * tw * along * 0.65 + stretch * tw * along * 0.035, stretch * tw * along * 0.02)
+}
+
+private func earFalloff(_ x: Float, _ y: Float, _ cx: Float, _ cy: Float) -> Float {
+    let d = length2((x - cx) / 0.05, (y - cy) / 0.042)
+    return smooth(d, 1.05, 0.2)
+}
+
+private func sampleGroom(
+    _ flowX: UnsafePointer<Float>?,
+    _ flowY: UnsafePointer<Float>?,
+    _ part: UnsafePointer<Float>?,
+    _ width: Int,
+    _ height: Int,
+    _ u: Float,
+    _ v: Float
+) -> (SIMD2<Float>, Float) {
+    guard let flowX, let flowY, let part, width > 1, height > 1 else { return (.zero, 0) }
+    let x = min(max(u, 0), 1) * Float(width - 1)
+    let y = min(max(v, 0), 1) * Float(height - 1)
+    let x0 = Int(x)
+    let y0 = Int(y)
+    let x1 = min(width - 1, x0 + 1)
+    let y1 = min(height - 1, y0 + 1)
+    let tx = x - Float(x0)
+    let ty = y - Float(y0)
+    func at(_ ix: Int, _ iy: Int) -> SIMD3<Float> {
+        let i = iy * width + ix
+        return SIMD3(flowX[i], flowY[i], part[i])
+    }
+    let a = at(x0, y0)
+    let b = at(x1, y0)
+    let c = at(x0, y1)
+    let d = at(x1, y1)
+    let top = a * (1 - tx) + b * tx
+    let bot = c * (1 - tx) + d * tx
+    let m = top * (1 - ty) + bot * ty
+    return (SIMD2(m.x, m.y), m.z)
+}
+
+private func sampleRGB(_ px: UnsafePointer<UInt8>?, _ width: Int, _ height: Int, _ u: Float, _ v: Float) -> SIMD3<Float> {
+    guard let px, width > 1, height > 1 else { return SIMD3(0.84, 0.77, 0.68) }
+    let x = min(max(u, 0), 1) * Float(width - 1)
+    let y = min(max(v, 0), 1) * Float(height - 1)
+    let x0 = Int(x)
+    let y0 = Int(y)
+    let x1 = min(width - 1, x0 + 1)
+    let y1 = min(height - 1, y0 + 1)
+    let tx = x - Float(x0)
+    let ty = y - Float(y0)
+    func at(_ ix: Int, _ iy: Int) -> SIMD3<Float> {
+        let i = (iy * width + ix) * 4
+        return SIMD3(Float(px[i]) / 255, Float(px[i + 1]) / 255, Float(px[i + 2]) / 255)
+    }
+    let a = at(x0, y0)
+    let b = at(x1, y0)
+    let c = at(x0, y1)
+    let d = at(x1, y1)
+    let top = a * (1 - tx) + b * tx
+    let bot = c * (1 - tx) + d * tx
+    return top * (1 - ty) + bot * ty
+}
+
+private func sampleR(_ px: UnsafePointer<UInt8>?, _ width: Int, _ height: Int, _ u: Float, _ v: Float) -> Float {
+    guard let px, width > 1, height > 1 else { return 0 }
+    let x = min(max(u, 0), 1) * Float(width - 1)
+    let y = min(max(v, 0), 1) * Float(height - 1)
+    let x0 = Int(x)
+    let y0 = Int(y)
+    let x1 = min(width - 1, x0 + 1)
+    let y1 = min(height - 1, y0 + 1)
+    let tx = x - Float(x0)
+    let ty = y - Float(y0)
+    func at(_ ix: Int, _ iy: Int) -> Float {
+        Float(px[(iy * width + ix) * 4]) / 255
+    }
+    let top = at(x0, y0) * (1 - tx) + at(x1, y0) * tx
+    let bot = at(x0, y1) * (1 - tx) + at(x1, y1) * tx
+    return top * (1 - ty) + bot * ty
+}
+
+private func grade(_ c: SIMD3<Float>) -> SIMD3<Float> {
+    simd_clamp(c * SIMD3<Float>(0.457, 0.643, 0.917) + SIMD3<Float>(-0.020, -0.018, 0.004), SIMD3(repeating: 0), SIMD3(repeating: 1))
+}
+
+private func hash2(_ x: Int, _ y: Int) -> Float {
+    var n = UInt32(bitPattern: x &* 374761393 &+ y &* 668265263)
+    n = (n ^ (n >> 13)) &* 1274126177
+    return Float(n & 0xFFFFFF) / Float(0xFFFFFF)
+}
+
+private func smooth(_ x: Float, _ a: Float, _ b: Float) -> Float {
+    let t = min(max((x - a) / (b - a + 1e-5), 0), 1)
+    return t * t * (3 - 2 * t)
+}
+
+private func fract(_ x: Float) -> Float { x - floor(x) }
+
+private func length2(_ x: Float, _ y: Float) -> Float { sqrt(x * x + y * y) }

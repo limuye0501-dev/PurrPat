@@ -16,8 +16,8 @@ final class GroomField {
     init(width: Int = 96, height: Int = 64) {
         self.width = width
         self.height = height
-        origin = SIMD2(-0.95, -0.58)
-        span = SIMD2(2.05, 1.16)
+        origin = SIMD2(0, 0)
+        span = SIMD2(1, 1)
         let n = width * height
         flow = Array(repeating: .zero, count: n)
         velocity = Array(repeating: .zero, count: n)
@@ -115,6 +115,16 @@ final class GroomField {
         let partBottom = c.1 * (1 - tx) + d.1 * tx
         let partV = partTop * (1 - ty) + partBottom * ty
         return (flowV, partV)
+    }
+
+    func packed() -> (width: Int, height: Int, flowX: [Float], flowY: [Float], part: [Float]) {
+        var flowX = [Float](repeating: 0, count: flow.count)
+        var flowY = [Float](repeating: 0, count: flow.count)
+        for i in flow.indices {
+            flowX[i] = flow[i].x
+            flowY[i] = flow[i].y
+        }
+        return (width, height, flowX, flowY, part)
     }
 
     /// RGBA8, flow packed from -1...1 into R and G, part in B.

@@ -16,7 +16,7 @@ final class AppSettings: ObservableObject {
 
     init() {
         let d = UserDefaults.standard
-        coat = Coat(rawValue: d.object(forKey: "purrpat.coat") as? Int ?? 0) ?? .midnight
+        coat = Coat(rawValue: d.object(forKey: "purrpat.coat") as? Int ?? 0) ?? .black
         catSize = d.object(forKey: "purrpat.size") as? Float ?? 1
         chub = d.object(forKey: "purrpat.chub") as? Float ?? 0.32
         scene = RoomScene(rawValue: d.object(forKey: "purrpat.scene") as? Int ?? 0) ?? .day
@@ -30,7 +30,7 @@ final class AppSettings: ObservableObject {
     }
 
     func clamp(isPro: Bool) {
-        if !Entitlement.coatUnlocked(coat, isPro: isPro) { coat = .midnight }
+        if !Entitlement.coatUnlocked(coat, isPro: isPro) { coat = .black }
         if !Entitlement.sceneUnlocked(scene, isPro: isPro) { scene = .day }
         if !Entitlement.rainUnlocked(isPro: isPro) { rain = false }
         if !Entitlement.handStyleUnlocked(handStyle, isPro: isPro) { handStyle = .mist }

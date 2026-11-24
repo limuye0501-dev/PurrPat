@@ -26,7 +26,7 @@ struct CatCanvas: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {
         if let cpu = uiView as? CPUCatView {
-            cpu.settings = settings
+            cpu.note(settings)
         } else if let metal = uiView as? MetalCatView {
             metal.settings = settings
         }
@@ -42,12 +42,20 @@ final class CPUCatView: UIView {
     private var didPaintRoom = false
     private var didFinishStill = false
 
+    func note(_ settings: AppSettings) {
+        if self.settings.coat != settings.coat || self.settings.scene != settings.scene || self.settings.rain != settings.rain {
+            didFinishStill = false
+            didPaintRoom = false
+        }
+        self.settings = settings
+    }
+
     init(session: PetSession, settings: AppSettings) {
         self.session = session
         self.settings = settings
         super.init(frame: .zero)
         isOpaque = true
-        backgroundColor = UIColor(red: 0.91, green: 0.84, blue: 0.75, alpha: 1)
+        backgroundColor = UIColor(red: 0.83, green: 0.78, blue: 0.70, alpha: 1)
         isAccessibilityElement = true
         accessibilityLabel = String(localized: "Stroke the cat")
     }
@@ -79,8 +87,8 @@ final class CPUCatView: UIView {
         guard bounds.width > 2, bounds.height > 2 else { return }
         if session.isFrozen && didFinishStill { return }
         backgroundColor = settings.scene == .night
-            ? UIColor(red: 0.07, green: 0.09, blue: 0.15, alpha: 1)
-            : UIColor(red: 0.91, green: 0.84, blue: 0.75, alpha: 1)
+            ? UIColor(red: 0.16, green: 0.22, blue: 0.32, alpha: 1)
+            : UIColor(red: 0.83, green: 0.78, blue: 0.70, alpha: 1)
         let boundsSize = bounds.size
         let scale = min(window?.screen.scale ?? 2, interactive ? 1.25 : 2)
         let coat = settings.coat
@@ -113,7 +121,8 @@ final class CPUCatView: UIView {
                 self.layer.contentsScale = image.scale
                 self.layer.contents = image.cgImage
                 self.renderingCat = false
-                if !interactive { self.didFinishStill = true }
+                let current = self.settings.coat == coat && self.settings.scene == scene
+                if !interactive && current { self.didFinishStill = true }
             }
         }
     }
@@ -125,6 +134,9 @@ final class MetalCatView: MTKView, MTKViewDelegate {
     private var pipeline: MTLRenderPipelineState?
     private var commandQueue: MTLCommandQueue?
     private var groomTexture: MTLTexture?
+    private var cushionTexture: MTLTexture?
+    private var catTextures: [Int: MTLTexture] = [:]
+    private var maskTextures: [Int: MTLTexture] = [:]
     private var last: CFTimeInterval = 0
 
     init(session: PetSession, settings: AppSettings, device: MTLDevice) {
@@ -154,6 +166,12 @@ final class MetalCatView: MTKView, MTKViewDelegate {
         )
         td.usage = [.shaderRead]
         groomTexture = device.makeTexture(descriptor: td)
+        let plates = PlateLibrary.shared
+        cushionTexture = plates.cushion.makeTexture(device: device)
+        for coat in Coat.allCases {
+            catTextures[coat.rawValue] = plates.cat(coat).makeTexture(device: device)
+            maskTextures[coat.rawValue] = plates.mask(coat).makeTexture(device: device)
+        }
         isAccessibilityElement = true
         accessibilityLabel = String(localized: "Stroke the cat")
     }
@@ -179,6 +197,9 @@ final class MetalCatView: MTKView, MTKViewDelegate {
         enc.setRenderPipelineState(pipeline)
         enc.setFragmentBytes(&uniforms, length: MemoryLayout<CatUniforms>.stride, index: 0)
         enc.setFragmentTexture(groomTexture, index: 0)
+        enc.setFragmentTexture(cushionTexture, index: 1)
+        enc.setFragmentTexture(catTextures[settings.coat.rawValue] ?? cushionTexture, index: 2)
+        enc.setFragmentTexture(maskTextures[settings.coat.rawValue], index: 3)
         enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         enc.endEncoding()
         command.present(drawable)

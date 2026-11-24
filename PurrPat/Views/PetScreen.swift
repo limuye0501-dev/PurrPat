@@ -20,8 +20,9 @@ struct PetScreen: View {
                 CatCanvas(session: session, settings: settings)
                     .ignoresSafeArea()
                     .gesture(drag(in: size))
-                if settings.handEnabled, let anchor = session.handAnchor {
+                if settings.handEnabled, let anchor = session.handAnchor, session.handOpacity > 0.02 {
                     hand(at: anchor, in: size)
+                        .opacity(session.handOpacity)
                 }
                 heart(in: size)
                 controls(insets: geo.safeAreaInsets)
@@ -97,7 +98,7 @@ struct PetScreen: View {
     }
 
     private func hand(at fingertip: CGPoint, in size: CGSize) -> some View {
-        let height = min(size.height * 0.5, 520)
+        let height = min(size.height * 0.20, 176)
         let width = height * HandStyle.aspect
         let anchor = HandStyle.anchor
         let center = CGPoint(
@@ -116,7 +117,7 @@ struct PetScreen: View {
     }
 
     private func heart(in size: CGSize) -> some View {
-        let point = CatLayout.toView(SIMD2(-0.08, -0.30), in: size, catSize: settings.catSize)
+        let point = CatLayout.point(SIMD2(0.30, 0.38), in: size, catSize: settings.catSize)
         let opacity = max(session.purrLevel * 0.65, max(0, (session.happiness - 0.28) * 1.35))
         return Image(systemName: "heart.fill")
             .font(.system(size: 18, weight: .semibold))
@@ -168,9 +169,11 @@ struct PetScreen: View {
                         if locked { showPaywall = true } else { settings.coat = coat }
                     } label: {
                         ZStack(alignment: .bottomTrailing) {
-                            Circle()
-                                .fill(Color(red: coat.swatch.0, green: coat.swatch.1, blue: coat.swatch.2))
+                            Image(uiImage: PlateLibrary.shared.swatch(coat))
+                                .resizable()
+                                .scaledToFill()
                                 .frame(width: 44, height: 44)
+                                .clipShape(Circle())
                                 .overlay {
                                     Circle().strokeBorder(.white.opacity(settings.coat == coat ? 0.95 : 0), lineWidth: 2.5)
                                 }

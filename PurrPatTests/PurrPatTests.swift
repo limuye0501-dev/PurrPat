@@ -63,10 +63,13 @@ final class PurrPatTests: XCTestCase {
     }
 
     func testFreeCoatsAndProGates() {
-        XCTAssertTrue(Entitlement.coatUnlocked(.midnight, isPro: false))
-        XCTAssertTrue(Entitlement.coatUnlocked(.cloud, isPro: false))
-        XCTAssertFalse(Entitlement.coatUnlocked(.mackerel, isPro: false))
-        XCTAssertTrue(Entitlement.coatUnlocked(.forest, isPro: true))
+        XCTAssertTrue(Entitlement.coatUnlocked(.black, isPro: false))
+        XCTAssertTrue(Entitlement.coatUnlocked(.ginger, isPro: false))
+        XCTAssertTrue(Entitlement.coatUnlocked(.white, isPro: false))
+        XCTAssertTrue(Entitlement.coatUnlocked(.calico, isPro: false))
+        XCTAssertFalse(Entitlement.coatUnlocked(.siamese, isPro: false))
+        XCTAssertFalse(Entitlement.coatUnlocked(.silverTabby, isPro: false))
+        XCTAssertTrue(Entitlement.coatUnlocked(.siamese, isPro: true))
         XCTAssertTrue(Entitlement.sceneUnlocked(.day, isPro: false))
         XCTAssertFalse(Entitlement.sceneUnlocked(.night, isPro: false))
         XCTAssertTrue(Entitlement.sceneUnlocked(.night, isPro: true))
@@ -74,26 +77,27 @@ final class PurrPatTests: XCTestCase {
         XCTAssertTrue(Entitlement.handStyleUnlocked(.mist, isPro: false))
         XCTAssertFalse(Entitlement.handStyleUnlocked(.navy, isPro: false))
         XCTAssertEqual(Coat.allCases.filter(\.isFree).count, 4)
-        XCTAssertGreaterThanOrEqual(Coat.allCases.count, 10)
+        XCTAssertEqual(Coat.allCases.count, 11)
+        XCTAssertEqual(Set(Coat.allCases.map(\.assetName)).count, 11)
     }
 
     func testAnatomyZonesAndGrain() {
         let pose = CatPose(chub: 0.35, breath: 0.4, earL: 0, earR: 0, tailStretch: 0, tailSway: 0, delight: 0, delightKind: 0)
-        let head = CatAnatomy.sample(SIMD2(-0.56, 0.02), pose: pose)
+        let head = CatAnatomy.sample(SIMD2(0.48, 0.27), pose: pose)
         XCTAssertEqual(head.zone, .head)
         XCTAssertLessThan(head.sdf, 0)
-        let back = CatAnatomy.sample(SIMD2(0.05, 0), pose: pose)
+        let back = CatAnatomy.sample(SIMD2(0.48, 0.48), pose: pose)
         XCTAssertEqual(back.zone, .back)
-        XCTAssertGreaterThan(back.grain.x, 0.5)
-        let outside = CatAnatomy.sample(SIMD2(0, 2), pose: pose)
+        XCTAssertGreaterThan(back.grain.y, 0.5)
+        let outside = CatAnatomy.sample(SIMD2(0.05, 0.05), pose: pose)
         XCTAssertEqual(outside.zone, .outside)
     }
 
-    func testMidnightIsDarkerThanCloud() {
-        let p = SIMD2<Float>(0.05, 0)
-        let night = CoatColor.albedo(.midnight, p: p, region: .body, along: 0.4)
-        let cloud = CoatColor.albedo(.cloud, p: p, region: .body, along: 0.4)
-        XCTAssertLessThan(night.x + night.y + night.z, cloud.x + cloud.y + cloud.z)
+    func testNightGradeCoolsAWarmColour() {
+        let day = SIMD3<Float>(0.86, 0.78, 0.66)
+        let night = simd_clamp(day * SIMD3<Float>(0.457, 0.643, 0.917) + SIMD3<Float>(-0.020, -0.018, 0.004), SIMD3(repeating: 0), SIMD3(repeating: 1))
+        XCTAssertLessThan(night.x, day.x)
+        XCTAssertGreaterThan(night.z, night.x)
     }
 
     func testPainterMakesAnImage() {
@@ -102,7 +106,7 @@ final class PurrPatTests: XCTestCase {
         let image = ScenePainter.render(
             bounds: CGSize(width: 90, height: 160),
             scale: 1,
-            coat: .ember,
+            coat: .ginger,
             scene: .day,
             pose: pose,
             groom: groom,

@@ -14,7 +14,8 @@ final class PetSession: ObservableObject {
     @Published var happiness: Double = 0.32
     @Published var purrLevel: Double = 0
     @Published var handAnchor: CGPoint?
-    @Published var handAngle: CGFloat = 0
+    @Published var handAngle: CGFloat = -0.35
+    @Published var handOpacity: Double = 0
     @Published var delightKind: Int = 0
 
     var onLevels: ((Double, Bool) -> Void)?
@@ -35,46 +36,48 @@ final class PetSession: ObservableObject {
         switch shot {
         case .day:
             settings.scene = .day
-            settings.coat = .midnight
+            settings.coat = .black
             settings.handEnabled = true
-            settings.chub = 0.28
+            settings.chub = 0.32
             settings.catSize = 1
         case .night:
             settings.scene = .night
-            settings.coat = .patchwork
-            settings.handEnabled = true
-            settings.chub = 0.82
-            settings.catSize = 1.05
+            settings.coat = .black
+            settings.handEnabled = false
+            settings.chub = 0.32
+            settings.catSize = 1
         case .coats:
             settings.scene = .day
-            settings.coat = .ember
+            settings.coat = .calico
             settings.handEnabled = false
-            settings.chub = 0.34
+            settings.chub = 0.32
         case .paywall:
             settings.scene = .day
-            settings.coat = .midnight
+            settings.coat = .ginger
             settings.handEnabled = false
         case .stroke:
             settings.scene = .day
-            settings.coat = .ember
+            settings.coat = .ginger
             settings.handEnabled = true
-            settings.chub = 0.4
+            settings.chub = 0.32
             settings.purrEnabled = true
         }
         settings.clamp(isPro: purchases.isPro)
-        if shot == .night { settings.scene = .night; settings.coat = .patchwork }
-        if shot == .day || shot == .night {
+        if shot == .night { settings.scene = .night; settings.coat = .black }
+        if shot == .day {
             stampPath()
-            demoHandLocal = SIMD2(0.30, 0.14)
+            demoHandLocal = SIMD2(0.49, 0.56)
             time = 0.7
+            handOpacity = 1
         }
         pose = makePose(settings: settings)
     }
 
     func placeDemoHand(in bounds: CGSize, settings: AppSettings) {
         guard touching == false, let local = demoHandLocal else { return }
-        handAnchor = CatLayout.toView(local, in: bounds, catSize: settings.catSize)
-        handAngle = -0.15
+        handAnchor = CatLayout.point(local, in: bounds, catSize: settings.catSize)
+        handAngle = -0.4
+        handOpacity = 1
     }
 
     var isFrozen: Bool { demo?.frozen == true }
@@ -95,6 +98,7 @@ final class PetSession: ObservableObject {
             tail.tick(dt: step)
         }
         if !isFrozen { groom.spring(dt: Float(step)) }
+        fadeHand(dt: step)
         pose = makePose(settings: settings)
         publish()
         onLevels?(mood.purrIntensity, settings.purrEnabled && (touching || scriptContact || mood.purrIntensity > 0.02))
@@ -108,10 +112,11 @@ final class PetSession: ObservableObject {
     init() {
         if let shot = DemoShot.current {
             demo = shot
-            if shot == .day || shot == .night {
+            if shot == .day {
                 stampPath()
-                demoHandLocal = SIMD2(0.30, 0.14)
+                demoHandLocal = SIMD2(0.49, 0.56)
                 time = 0.7
+                handOpacity = 1
             }
         }
     }
@@ -119,7 +124,7 @@ final class PetSession: ObservableObject {
     func pointer(at point: CGPoint, in bounds: CGSize, settings: AppSettings, when now: CFTimeInterval) {
         touching = true
         demoHandLocal = nil
-        let local = CatLayout.toLocal(point, in: bounds, catSize: settings.catSize)
+        let local = CatLayout.uv(point, in: bounds, catSize: settings.catSize)
         if let prev = lastLocal, let last = lastTime {
             let dt = now - last
             if dt > 0.001 && dt < 0.25 {
@@ -134,7 +139,8 @@ final class PetSession: ObservableObject {
         lastLocal = local
         lastPoint = point
         lastTime = now
-        handAnchor = CGPoint(x: point.x + 34, y: point.y + 48)
+        handAnchor = point
+        handOpacity = 1
         if !settings.hasStroked, let prev = lastLocal, simd_length(local - prev) > 0 {
             settings.hasStroked = true
         }
@@ -148,7 +154,6 @@ final class PetSession: ObservableObject {
         lastLocal = nil
         lastPoint = nil
         lastTime = nil
-        if demoHandLocal == nil { handAnchor = nil }
     }
 
     private func driveScript(bounds: CGSize, settings: AppSettings, dt: Double) {
@@ -157,22 +162,21 @@ final class PetSession: ObservableObject {
         let down = u < 0.7
         let t = Float(min(1, u / 0.7))
         let eased = t * t * (3 - 2 * t)
-        let local = SIMD2<Float>(-0.24 + eased * 0.58, sin(eased * .pi) * -0.015)
+        let local = SIMD2<Float>(0.50, 0.32 + eased * 0.30)
         if down {
             scriptContact = true
             if let prev = lastLocal {
                 apply(from: prev, to: local, dt: max(dt, 0.008), bounds: bounds, settings: settings)
             }
             lastLocal = local
-            handAnchor = CatLayout.toView(local, in: bounds, catSize: settings.catSize)
-                .applying(CGAffineTransform(translationX: 28, y: 42))
-            handAngle = -0.2
+            handAnchor = CatLayout.point(local, in: bounds, catSize: settings.catSize)
+            handAngle = -0.45
+            handOpacity = 1
         } else if scriptContact {
             scriptContact = false
             grabbingTail = false
             tail.endGrab()
             lastLocal = nil
-            handAnchor = nil
             mood.idle(dt: dt)
         } else {
             mood.idle(dt: dt)
@@ -182,19 +186,20 @@ final class PetSession: ObservableObject {
 
     private func apply(from prev: SIMD2<Float>, to local: SIMD2<Float>, dt: Double, bounds: CGSize, settings: AppSettings) {
         let delta = local - prev
-        let speed = Double(simd_length(delta) * CatLayout.scale(in: bounds, catSize: settings.catSize)) / dt
+        let span = CatLayout.pointsPerUV(in: bounds, catSize: settings.catSize)
+        let speed = Double(hypot(delta.x * span.x, delta.y * span.y)) / dt
         let sample = CatAnatomy.sample(local, pose: pose)
         if sample.zone != .outside {
-            groom.stamp(local: local, direction: delta, radius: 0.075, amount: 0.95)
+            groom.stamp(local: local, direction: delta, radius: 0.045, amount: 0.95)
             settings.hasStroked = true
         }
-        let nearBase = simd_distance(prev, CatAnatomy.tailBase) < 0.2 || simd_distance(local, CatAnatomy.tailBase) < 0.18
+        let nearBase = simd_distance(prev, CatAnatomy.tailBase) < 0.08 || simd_distance(local, CatAnatomy.tailBase) < 0.07
         if !grabbingTail && nearBase && (sample.zone == .tail || sample.region == .tail) {
             grabbingTail = true
             tail.beginGrab()
         }
         if grabbingTail {
-            let outward = (Double(simd_distance(local, CatAnatomy.tailBase)) - 0.08) / 0.55
+            let outward = (Double(simd_distance(local, CatAnatomy.tailBase)) - 0.04) / 0.28
             tail.drag(outward: outward)
         } else if sample.zone != .outside {
             let dir = simd_length(delta) > 1e-4 ? simd_normalize(delta) : SIMD2<Float>(1, 0)
@@ -205,12 +210,12 @@ final class PetSession: ObservableObject {
 
     private func stampPath() {
         let path: [SIMD2<Float>] = [
-            SIMD2(-0.22, -0.01), SIMD2(-0.02, -0.02), SIMD2(0.18, 0.0), SIMD2(0.36, 0.015),
+            SIMD2(0.50, 0.34), SIMD2(0.49, 0.44), SIMD2(0.49, 0.54), SIMD2(0.48, 0.62),
         ]
         for i in 0..<(path.count - 1) {
             let mid = (path[i] + path[i + 1]) * 0.5
-            groom.stamp(local: path[i], direction: path[i + 1] - path[i], radius: 0.07, amount: 1)
-            groom.stamp(local: mid, direction: path[i + 1] - path[i], radius: 0.07, amount: 1)
+            groom.stamp(local: path[i], direction: path[i + 1] - path[i], radius: 0.05, amount: 1)
+            groom.stamp(local: mid, direction: path[i + 1] - path[i], radius: 0.05, amount: 1)
         }
     }
 
@@ -233,6 +238,20 @@ final class PetSession: ObservableObject {
         if abs(happiness - mood.happiness) > 0.008 { happiness = mood.happiness }
         if abs(purrLevel - mood.purrIntensity) > 0.02 { purrLevel = mood.purrIntensity }
         if delightKind != mood.delightKind { delightKind = mood.delightKind }
+    }
+
+    private func fadeHand(dt: Double) {
+        if touching || scriptContact || demoHandLocal != nil {
+            if handOpacity < 1 { handOpacity = 1 }
+            return
+        }
+        guard handOpacity > 0 else { return }
+        let next = max(0, handOpacity - dt / 0.4)
+        handOpacity = next
+        if next <= 0.02 {
+            handOpacity = 0
+            handAnchor = nil
+        }
     }
 
     private func breathValue(_ time: Double) -> Float {
