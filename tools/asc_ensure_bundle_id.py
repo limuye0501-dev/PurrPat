@@ -109,11 +109,17 @@ def ensure_profile(auth: str, bundle: dict) -> None:
     if existing.get("data"):
         print("app store profile already exists")
         return
-    certs = request(
-        auth,
-        "https://api.appstoreconnect.apple.com/v1/certificates?filter[certificateType]=IOS_DISTRIBUTION&limit=10",
-    )
-    cert_ids = [item["id"] for item in certs.get("data", [])]
+    certs = request(auth, "https://api.appstoreconnect.apple.com/v1/certificates?limit=50")
+    today = time.strftime("%Y-%m-%d")
+    cert_ids = []
+    for item in certs.get("data", []):
+        attrs = item.get("attributes") or {}
+        kind = attrs.get("certificateType")
+        expires = str(attrs.get("expirationDate") or "")
+        print("certificate", kind, attrs.get("displayName", ""), expires[:10])
+        if kind in {"IOS_DISTRIBUTION", "DISTRIBUTION", "APPLE_DISTRIBUTION"} and expires[:10] >= today:
+            cert_ids.append(item["id"])
+    cert_ids = cert_ids[:3]
     if not cert_ids:
         print("profile skipped: no iOS distribution certificate in App Store Connect")
         return
