@@ -106,8 +106,11 @@ def ensure_profile(auth: str, bundle: dict) -> None:
         auth,
         f"https://api.appstoreconnect.apple.com/v1/profiles?filter[name]=Purr%20Pat%20App%20Store&filter[profileType]=IOS_APP_STORE",
     )
-    if existing.get("data"):
+    profile = (existing.get("data") or [None])[0]
+    if profile:
         print("app store profile already exists")
+        detail = request(auth, f"https://api.appstoreconnect.apple.com/v1/profiles/{profile['id']}")
+        install_profile((detail.get("data") or {}).get("attributes", {}).get("profileContent"))
         return
     certs = request(auth, "https://api.appstoreconnect.apple.com/v1/certificates?limit=50")
     today = time.strftime("%Y-%m-%d")
@@ -137,16 +140,30 @@ def ensure_profile(auth: str, bundle: dict) -> None:
             }
         },
     )
-    content = (created.get("data") or {}).get("attributes", {}).get("profileContent")
+    install_profile((created.get("data") or {}).get("attributes", {}).get("profileContent"))
+    print("app store profile created")
+
+
+def install_profile(content: str | None) -> None:
     if not content:
         print("profile response had no content")
         return
     folder = os.path.expanduser("~/Library/MobileDevice/Provisioning Profiles")
     os.makedirs(folder, exist_ok=True)
+    raw = base64.b64decode(content)
     path = os.path.join(folder, "PurrPatAppStore.mobileprovision")
     with open(path, "wb") as handle:
-        handle.write(base64.b64decode(content))
-    print("app store profile created")
+        handle.write(raw)
+    decoded = subprocess.check_output(["security", "cms", "-D", "-i", path])
+    import plistlib
+
+    info = plistlib.loads(decoded)
+    uuid = info.get("UUID", "PurrPatAppStore")
+    installed = os.path.join(folder, f"{uuid}.mobileprovision")
+    if installed != path:
+        with open(installed, "wb") as handle:
+            handle.write(raw)
+    print("installed profile", info.get("Name", ""), uuid)
 
 
 def ensure() -> None:
@@ -158,7 +175,7 @@ def ensure() -> None:
     try:
         ensure_profile(auth, bundle)
     except Exception as exc:
-        print("profile step skipped:", type(exc).__name__)
+        print("profile step skipped:", type(exc).__name__, str(exc)[:200])
 
 
 def builds(auth: str) -> list[dict]:
