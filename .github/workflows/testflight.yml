@@ -28,11 +28,24 @@ jobs:
           P8_B64: ${{ secrets.ASC_KEY_P8 }}
           KEY_ID: ${{ secrets.ASC_KEY_ID }}
         run: |
-          mkdir -p ~/private_keys
-          KP=~/private_keys/AuthKey_${KEY_ID}.p8
-          echo "$P8_B64" | base64 --decode > "$KP"
+          set -euo pipefail
+          mkdir -p "$HOME/private_keys" "$HOME/.appstoreconnect/private_keys"
+          KP="$HOME/private_keys/AuthKey_${KEY_ID}.p8"
+          if printf '%s' "$P8_B64" | grep -q "BEGIN PRIVATE KEY"; then
+            printf '%s\n' "$P8_B64" > "$KP"
+          else
+            printf '%s' "$P8_B64" | tr -d '[:space:]' | base64 -D > "$KP" 2>/dev/null || printf '%s' "$P8_B64" | tr -d '[:space:]' | base64 -d > "$KP"
+          fi
+          if ! openssl pkey -in "$KP" -noout >/dev/null 2>&1; then
+            base64 -D < "$KP" > "$KP.once" 2>/dev/null || base64 -d < "$KP" > "$KP.once"
+            mv "$KP.once" "$KP"
+          fi
+          openssl pkey -in "$KP" -noout
+          chmod 600 "$KP"
+          cp "$KP" "$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8"
           echo "ASC_KEY_PATH=$KP" >> "$GITHUB_ENV"
           echo "ASC_KEY_ID=$KEY_ID" >> "$GITHUB_ENV"
+          echo "api key ready ($(wc -c < "$KP") bytes)"
       - name: Import distribution certificate
         env:
           P12_B64: ${{ secrets.DIST_CERT_P12 }}
