@@ -29,4 +29,4 @@ A groom map remembers which way the coat was pushed. Every frame a damped spring
 
 - `.github/workflows/build.yml` builds and runs unit tests on a simulator for pull requests.
 - `.github/workflows/screenshots.yml` captures the daylight stroke, moonlight, the coat row, the paywall, and a short stroking video.
-- `.github/workflows/testflight.yml` archives with automatic signing (build number = run number + 9) on a tag `v*` or when the workflow is run by hand. It tries to register the bundle id first. Upload still needs the App Store Connect app record, which does not exist yet.
+- `.github/workflows/testflight.yml` archives with automatic signing (build number = run number + 9) on a tag `v*` or when the workflow is run by hand. The App Store Connect app is `6838995846` (`com.limuye.purrpat`). After upload it marks the build as using no non-exempt encryption and adds it to the internal TestFlight group. If `com.limuye.purrpat.pro` is not in App Store Connect yet, the paywall still shows US$2.99.

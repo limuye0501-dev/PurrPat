@@ -4,6 +4,8 @@ import StoreKit
 @MainActor
 final class PurchaseManager: ObservableObject {
     static let proProductID = "com.limuye.purrpat.pro"
+    /// Shown when App Store Connect has no product yet, or the store request fails.
+    static let fallbackPrice = "US$2.99"
 
     @Published private(set) var isPro: Bool
     @Published private(set) var displayPrice: String?
@@ -21,20 +23,22 @@ final class PurchaseManager: ObservableObject {
         paywallShot = Self.argument("paywall", in: args)
         let cached = UserDefaults.standard.bool(forKey: "purrpat.isPro")
         isPro = !paywallShot && (unlockedByDemo || cached)
-        if paywallShot {
-            displayPrice = Self.priceFromStoreKitFile()
-        }
+        displayPrice = Self.resolvedFallbackPrice()
     }
 
     func start() {
         guard updates == nil else { return }
-        if paywallShot, displayPrice == nil {
-            displayPrice = Self.priceFromStoreKitFile()
+        if displayPrice == nil {
+            displayPrice = Self.resolvedFallbackPrice()
         }
         updates = Task { [weak self] in
             guard let self else { return }
-            for await update in Transaction.updates {
-                await self.handle(update)
+            do {
+                for await update in Transaction.updates {
+                    await self.handle(update)
+                }
+            } catch {
+                // No transaction stream when the product is not in App Store Connect yet.
             }
         }
         Task { await loadProduct(); await refresh() }
@@ -79,10 +83,10 @@ final class PurchaseManager: ObservableObject {
     private func loadProduct() async {
         let found = await Self.products(id: Self.proProductID)
         product = found.first
-        if let price = found.first?.displayPrice {
+        if let price = found.first?.displayPrice, !price.isEmpty {
             displayPrice = price
-        } else if paywallShot, displayPrice == nil {
-            displayPrice = Self.priceFromStoreKitFile()
+        } else {
+            displayPrice = Self.resolvedFallbackPrice()
         }
     }
 
@@ -112,6 +116,10 @@ final class PurchaseManager: ObservableObject {
         if price.contains("$") || price.contains("¥") || price.contains("￥") { return price }
         let storefront = (json["settings"] as? [String: Any])?["_storefront"] as? String
         return storefront == "USA" ? "US$\(price)" : price
+    }
+
+    private static func resolvedFallbackPrice() -> String {
+        priceFromStoreKitFile() ?? fallbackPrice
     }
 
     private static func argument(_ name: String, in args: [String]) -> Bool {
