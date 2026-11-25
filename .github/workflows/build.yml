@@ -1,0 +1,40 @@
+name: iOS Simulator Build
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select latest Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|RC' | sort -V | tail -1)
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+      - name: Install Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+      - run: brew install xcodegen && xcodegen generate
+      - name: Build and test
+        run: |
+          set -o pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          c=[x for r in d for x in d[r] if x.get("isAvailable") and "iPhone" in x["name"]]
+          pro=[x for x in c if "Pro" in x["name"]]
+          print((pro or c)[-1]["udid"])
+          ')
+          xcodebuild test -project PurrPat.xcodeproj -scheme PurrPat -configuration Debug \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee build.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
