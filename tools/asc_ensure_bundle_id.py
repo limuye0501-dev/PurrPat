@@ -64,13 +64,20 @@ def request(token: str, url: str, payload: dict | None = None, method: str | Non
             "Content-Type": "application/json",
         },
     )
-    try:
-        with urllib.request.urlopen(req, timeout=40) as res:
-            body = res.read()
-            return json.loads(body) if body else {}
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", "replace")[:400]
-        raise RuntimeError(f"ASC {exc.code} {verb} {url.split('?')[0]} {detail}") from None
+    last_error = None
+    for attempt in range(6):
+        try:
+            with urllib.request.urlopen(req, timeout=40) as res:
+                body = res.read()
+                return json.loads(body) if body else {}
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:400]
+            raise RuntimeError(f"ASC {exc.code} {verb} {url.split('?')[0]} {detail}") from None
+        except urllib.error.URLError as exc:
+            last_error = exc
+            print(f"network {attempt + 1}: {exc}")
+            time.sleep(5 * (attempt + 1))
+    raise RuntimeError(f"ASC network {verb} {url.split('?')[0]} {last_error}")
 
 
 def token() -> str:

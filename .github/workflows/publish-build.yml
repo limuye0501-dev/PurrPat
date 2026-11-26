@@ -1,0 +1,43 @@
+name: Publish existing build
+on:
+  push:
+    tags: ["publish-*"]
+jobs:
+  publish:
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    env:
+      ASC_APP_ID: "6838995846"
+    steps:
+      - uses: actions/checkout@v4
+      - name: ASC API key
+        env:
+          P8_B64: ${{ secrets.ASC_KEY_P8 }}
+          KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/private_keys" "$HOME/.appstoreconnect/private_keys"
+          KP="$HOME/private_keys/AuthKey_${KEY_ID}.p8"
+          if printf '%s' "$P8_B64" | grep -q "BEGIN PRIVATE KEY"; then
+            printf '%s\n' "$P8_B64" > "$KP"
+          else
+            printf '%s' "$P8_B64" | tr -d '[:space:]' | base64 -D > "$KP" 2>/dev/null || printf '%s' "$P8_B64" | tr -d '[:space:]' | base64 -d > "$KP"
+          fi
+          if ! openssl pkey -in "$KP" -noout >/dev/null 2>&1; then
+            base64 -D < "$KP" > "$KP.once" 2>/dev/null || base64 -d < "$KP" > "$KP.once"
+            mv "$KP.once" "$KP"
+          fi
+          openssl pkey -in "$KP" -noout
+          chmod 600 "$KP"
+          cp "$KP" "$HOME/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8"
+          echo "ASC_KEY_PATH=$KP" >> "$GITHUB_ENV"
+          echo "ASC_KEY_ID=$KEY_ID" >> "$GITHUB_ENV"
+      - name: Add the uploaded build to internal testing
+        env:
+          ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          export BUILD_NUMBER="${GITHUB_REF_NAME#publish-}"
+          echo "publish existing build $BUILD_NUMBER"
+          python3 tools/asc_ensure_bundle_id.py publish
