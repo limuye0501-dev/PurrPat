@@ -56,7 +56,8 @@ jobs:
             xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularMode active --cellularBars 4 || true
           }
           run_shots() {
-            xcodebuild test -project PurrPat.xcodeproj -scheme PurrPatShots -configuration Debug \
+            # A wedged simulator otherwise holds this step until the job is cancelled.
+            perl -e 'alarm 2400; exec @ARGV' xcodebuild test -project PurrPat.xcodeproj -scheme PurrPatShots -configuration Debug \
               -destination "platform=iOS Simulator,id=$UDID" \
               -only-testing:PurrPatUITests/ScreenshotTests/testShots \
               -derivedDataPath DerivedData \
