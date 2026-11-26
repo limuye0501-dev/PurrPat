@@ -11,6 +11,8 @@ struct PetScreen: View {
     @State private var showSettings = false
     @State private var showPaywall = false
     @State private var paywallAfterSettings = false
+    /// Window insets. A SwiftUI safe-area read inside `ignoresSafeArea` is 0, so this starts at a status-bar height and only updates from the window.
+    @State private var windowInsets = UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0)
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -27,6 +29,13 @@ struct PetScreen: View {
                         .opacity(session.handOpacity)
                 }
                 heart(in: size)
+                VStack(spacing: 0) {
+                    topControls
+                        .padding(.top, windowInsets.top)
+                    Spacer()
+                    bottomControls
+                        .padding(.bottom, windowInsets.bottom)
+                }
             }
             .onAppear { session.placeDemoHand(in: size, settings: settings) }
             .onChange(of: size) { _, newSize in
@@ -34,8 +43,12 @@ struct PetScreen: View {
             }
         }
         .ignoresSafeArea()
-        .safeAreaInset(edge: .top, spacing: 0) { topControls }
-        .safeAreaInset(edge: .bottom, spacing: 0) { bottomControls }
+        .background {
+            WindowSafeAreaProbe { insets in
+                guard insets.top > 1 else { return }
+                if insets != windowInsets { windowInsets = insets }
+            }
+        }
         .preferredColorScheme(settings.scene == .night ? .dark : .light)
         .onAppear(perform: appear)
         .onChange(of: scenePhase) { _, phase in
@@ -163,7 +176,7 @@ struct PetScreen: View {
             .accessibilityHidden(true)
     }
 
-    /// Outside the full-bleed reader, so these sit below the status bar.
+    /// Padded by the window's safe area, so a zero SwiftUI inset cannot slide these under the status bar.
     private var topControls: some View {
         HStack(spacing: 8) {
             Spacer()
@@ -183,7 +196,7 @@ struct PetScreen: View {
         .padding(.bottom, 4)
     }
 
-    /// Outside the full-bleed reader, so the coat bar clears the home indicator.
+    /// Padded by the window's bottom inset, so the coat bar clears the home indicator.
     private var bottomControls: some View {
         VStack(spacing: 0) {
             if !settings.hasStroked && DemoShot.current == nil {
@@ -285,5 +298,50 @@ struct PetScreen: View {
             pop.permittedArrowDirections = .up
         }
         top.present(controller, animated: true)
+    }
+}
+
+/// Reads `UIWindow.safeAreaInsets`. SwiftUI reports 0 for a view that ignores the safe area.
+private struct WindowSafeAreaProbe: UIViewRepresentable {
+    var onChange: (UIEdgeInsets) -> Void
+
+    func makeUIView(context: Context) -> Probe { Probe(onChange: onChange) }
+
+    func updateUIView(_ uiView: Probe, context: Context) {
+        uiView.onChange = onChange
+        uiView.publish()
+    }
+
+    final class Probe: UIView {
+        var onChange: (UIEdgeInsets) -> Void
+
+        init(onChange: @escaping (UIEdgeInsets) -> Void) {
+            self.onChange = onChange
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false
+            backgroundColor = .clear
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            publish()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            publish()
+        }
+
+        override func safeAreaInsetsDidChange() {
+            super.safeAreaInsetsDidChange()
+            publish()
+        }
+
+        func publish() {
+            let insets = window?.safeAreaInsets ?? safeAreaInsets
+            onChange(insets)
+        }
     }
 }

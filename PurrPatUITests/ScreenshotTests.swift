@@ -19,6 +19,7 @@ final class ScreenshotTests: XCTestCase {
         ]
         for (file, language, locale) in locales {
             for shot in ["day", "night", "coats", "paywall"] {
+                Self.lockStatusBar()
                 let app = XCUIApplication()
                 app.launchArguments = ["-PurrPatShot", shot, "-PurrPatCPU", "-AppleLanguages", "(\(language))", "-AppleLocale", locale]
                 if shot == "night" {
@@ -50,6 +51,19 @@ final class ScreenshotTests: XCTestCase {
                 try data.write(to: directory.appendingPathComponent("\(file)-\(shot).png"))
                 app.terminate()
             }
+        }
+    }
+
+    /// The simulator clock is set once before xcodebuild. A later launch was captured with the real time, so set 9:41 again before every shot.
+    private static func lockStatusBar() {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        task.arguments = ["simctl", "status_bar", "booted", "override", "--time", "9:41", "--batteryState", "charged", "--batteryLevel", "100", "--cellularMode", "active", "--cellularBars", "4"]
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            // The workflow also sets the override before xcodebuild.
         }
     }
 
