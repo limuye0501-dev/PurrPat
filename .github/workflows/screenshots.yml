@@ -39,15 +39,11 @@ jobs:
               hits = [x for x in devices if x["name"] == name]
               return hits[-1] if hits else None
           big = exact("iPhone 16 Pro Max") or exact("iPhone 17 Pro Max")
-          small = exact("iPhone 16") or exact("iPhone 17") or exact("iPhone SE (3rd generation)")
           if big is None:
               names = sorted({x["name"] for x in devices})
               raise SystemExit("no iPhone 16/17 Pro Max for 1320x2868 shots; have: " + ", ".join(names))
           open("/tmp/purrpat-udid", "w").write(big["udid"])
-          open("/tmp/purrpat-small-udid", "w").write(small["udid"] if small else "")
           print("6.9-inch " + big["name"], file=sys.stderr)
-          if small:
-              print("compact " + small["name"], file=sys.stderr)
           PY
           UDID=$(cat /tmp/purrpat-udid)
           echo "simulator $UDID"
@@ -62,24 +58,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
           cp -R /tmp/purrpat-shots/. shots/
           python3 tools/check_shot.py shots
-          # A smaller phone confirms the safe area. simctl screenshot can hang there, so this pass must not fail the 6.9" stills.
-          SMALL=$(cat /tmp/purrpat-small-udid || true)
-          if [ -n "${SMALL:-}" ]; then
-            APP=$(find DerivedData/Build/Products -path '*Debug-iphonesimulator/PurrPat.app' -type d | head -1)
-            xcrun simctl boot "$SMALL" || true
-            xcrun simctl install "$SMALL" "$APP" || true
-            xcrun simctl status_bar "$SMALL" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularMode active --cellularBars 4 || true
-            mkdir -p shots/compact
-            perl -e 'alarm 60; exec @ARGV' xcrun simctl terminate "$SMALL" com.limuye.purrpat || true
-            perl -e 'alarm 90; exec @ARGV' xcrun simctl launch "$SMALL" com.limuye.purrpat -PurrPatShot day -PurrPatCPU -AppleLanguages "(en)" -AppleLocale en_US || true
-            for _ in $(seq 1 8); do
-              sleep 3
-              perl -e 'alarm 25; exec @ARGV' xcrun simctl io "$SMALL" screenshot shots/compact/en-day.png || true
-              if [ -s shots/compact/en-day.png ] && python3 tools/check_shot.py shots/compact/en-day.png day; then
-                break
-              fi
-            done
-          fi
           # The stills prove the cat. Record the stroke only after the ginger cat is actually up.
           xcrun simctl boot "$UDID" || true
           for _ in $(seq 1 24); do
