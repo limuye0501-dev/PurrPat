@@ -1,6 +1,6 @@
 # Purr Pat · 撸猫
 
-A calm cat-petting toy for iPhone and iPad. A cat lies on a cushion by the window. Stroke with the fur and it purrs — in the speaker, and in your hand.
+A calm cat-petting toy for iPhone. A cat lies on a cushion by the window. Stroke with the fur and it purrs — in the speaker, and in your hand.
 
 ## Open
 

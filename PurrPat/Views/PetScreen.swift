@@ -27,7 +27,6 @@ struct PetScreen: View {
                         .opacity(session.handOpacity)
                 }
                 heart(in: size)
-                controls(insets: geo.safeAreaInsets)
             }
             .onAppear { session.placeDemoHand(in: size, settings: settings) }
             .onChange(of: size) { _, newSize in
@@ -35,6 +34,8 @@ struct PetScreen: View {
             }
         }
         .ignoresSafeArea()
+        .safeAreaInset(edge: .top, spacing: 0) { topControls }
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottomControls }
         .preferredColorScheme(settings.scene == .night ? .dark : .light)
         .onAppear(perform: appear)
         .onChange(of: scenePhase) { _, phase in
@@ -162,24 +163,29 @@ struct PetScreen: View {
             .accessibilityHidden(true)
     }
 
-    private func controls(insets: EdgeInsets) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Spacer()
-                chrome("square.and.arrow.up", "Share") { share() }
-                chrome(settings.purrEnabled ? "waveform" : "speaker.slash", "Purr") {
-                    settings.purrEnabled.toggle()
-                }
-                if settings.scene == .night {
-                    chrome("sun.max", "Daylight") { settings.scene = .day }
-                } else {
-                    chrome("moon.stars", "Moonlight") { toggleScene() }
-                }
-                chrome("gearshape", "Settings") { showSettings = true }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, insets.top + 8)
+    /// Outside the full-bleed reader, so these sit below the status bar.
+    private var topControls: some View {
+        HStack(spacing: 8) {
             Spacer()
+            chrome("square.and.arrow.up", "Share") { share() }
+            chrome(settings.purrEnabled ? "waveform" : "speaker.slash", "Purr") {
+                settings.purrEnabled.toggle()
+            }
+            if settings.scene == .night {
+                chrome("sun.max", "Daylight") { settings.scene = .day }
+            } else {
+                chrome("moon.stars", "Moonlight") { toggleScene() }
+            }
+            chrome("gearshape", "Settings") { showSettings = true }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    /// Outside the full-bleed reader, so the coat bar clears the home indicator.
+    private var bottomControls: some View {
+        VStack(spacing: 0) {
             if !settings.hasStroked && DemoShot.current == nil {
                 Text("Stroke with the fur")
                     .font(.footnote)
@@ -189,7 +195,7 @@ struct PetScreen: View {
                     .padding(.bottom, 8)
             }
             coatBar
-                .padding(.bottom, insets.bottom + 8)
+                .padding(.bottom, 8)
         }
     }
 

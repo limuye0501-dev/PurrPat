@@ -1,11 +1,13 @@
 name: Screenshots
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 jobs:
   shots:
     runs-on: macos-15-intel
-    timeout-minutes: 40
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Select latest Xcode
@@ -29,16 +31,30 @@ jobs:
       - name: Capture
         run: |
           set -euo pipefail
-          UDID=$(xcrun simctl list devices available -j | python3 -c '
-          import json,sys
-          d=json.load(sys.stdin)["devices"]
-          c=[x for r in d for x in d[r] if x.get("isAvailable") and "iPhone" in x["name"]]
-          pro=[x for x in c if "Pro" in x["name"] and "Max" in x["name"]]
-          print((pro or c)[-1]["udid"])
-          ')
+          python3 - <<'PY'
+          import json, subprocess, sys
+          raw = subprocess.check_output(["xcrun", "simctl", "list", "devices", "available", "-j"])
+          devices = [x for runtime in json.loads(raw)["devices"].values() for x in runtime if x.get("isAvailable")]
+          def exact(name):
+              hits = [x for x in devices if x["name"] == name]
+              return hits[-1] if hits else None
+          big = exact("iPhone 16 Pro Max") or exact("iPhone 17 Pro Max")
+          small = exact("iPhone 16") or exact("iPhone 17") or exact("iPhone SE (3rd generation)")
+          if big is None:
+              names = sorted({x["name"] for x in devices})
+              raise SystemExit("no iPhone 16/17 Pro Max for 1320x2868 shots; have: " + ", ".join(names))
+          open("/tmp/purrpat-udid", "w").write(big["udid"])
+          open("/tmp/purrpat-small-udid", "w").write(small["udid"] if small else "")
+          print("6.9-inch " + big["name"], file=sys.stderr)
+          if small:
+              print("compact " + small["name"], file=sys.stderr)
+          PY
+          UDID=$(cat /tmp/purrpat-udid)
           echo "simulator $UDID"
           rm -rf /tmp/purrpat-shots
           mkdir -p /tmp/purrpat-shots shots
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularMode active --cellularBars 4 || true
           xcodebuild test -project PurrPat.xcodeproj -scheme PurrPatShots -configuration Debug \
             -destination "platform=iOS Simulator,id=$UDID" \
             -only-testing:PurrPatUITests/ScreenshotTests/testShots \
@@ -46,6 +62,28 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
           cp -R /tmp/purrpat-shots/. shots/
           python3 tools/check_shot.py shots
+          SMALL=$(cat /tmp/purrpat-small-udid)
+          if [ -n "$SMALL" ]; then
+            APP=$(find DerivedData/Build/Products -name 'PurrPat.app' -type d | head -1)
+            xcrun simctl boot "$SMALL" || true
+            xcrun simctl install "$SMALL" "$APP"
+            xcrun simctl status_bar "$SMALL" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularMode active --cellularBars 4 || true
+            mkdir -p shots/compact
+            for shot in day coats paywall; do
+              perl -e 'alarm 60; exec @ARGV' xcrun simctl terminate "$SMALL" com.limuye.purrpat || true
+              perl -e 'alarm 90; exec @ARGV' xcrun simctl launch "$SMALL" com.limuye.purrpat -PurrPatShot "$shot" -PurrPatCPU -AppleLanguages "(en)" -AppleLocale en_US
+              ready=0
+              for _ in $(seq 1 20); do
+                sleep 2
+                perl -e 'alarm 20; exec @ARGV' xcrun simctl io "$SMALL" screenshot "shots/compact/en-${shot}.png"
+                if python3 tools/check_shot.py "shots/compact/en-${shot}.png" "$shot"; then
+                  ready=1
+                  break
+                fi
+              done
+              test "$ready" = 1
+            done
+          fi
           # The stills prove the cat. Record the stroke only after the ginger cat is actually up.
           xcrun simctl boot "$UDID" || true
           for _ in $(seq 1 24); do

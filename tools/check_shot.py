@@ -9,6 +9,7 @@ import struct
 import sys
 import zlib
 from pathlib import Path
+from typing import Optional, Tuple
 
 
 def read_png(path: Path):
@@ -154,7 +155,7 @@ def brown(rgb) -> bool:
     return 70 < red < 150 and 35 < green < 100 and 15 < blue < 80 and red > green + 15
 
 
-def check(path: Path, kind: str) -> None:
+def check(path: Path, kind: str, require_size: Optional[Tuple[int, int]] = None) -> None:
     width, height, channels, rows = read_png(path)
     full = (0, 0, width, height)
     margin = (int(width * 0.05), int(height * 0.38), int(width * 0.16), int(height * 0.55))
@@ -166,6 +167,8 @@ def check(path: Path, kind: str) -> None:
     margin_mean, _, _, _ = region_stats(rows, channels, width, height, margin)
     beige_count = count_where(rows, channels, width, height, margin, beige)
     problems = []
+    if require_size is not None and (width, height) != require_size:
+        problems.append(f"expected {require_size[0]}x{require_size[1]}, got {width}x{height}")
 
     if kind == "day":
         if mean < 50:
@@ -221,8 +224,9 @@ def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: check_shot.py SHOTS_DIR | check_shot.py FILE KIND")
     directory = Path(sys.argv[1])
-    for kind in ("day", "night", "coats", "paywall"):
-        check(directory / f"en-{kind}.png", kind)
+    for language in ("en", "zh-Hans", "zh-Hant", "ja"):
+        for kind in ("day", "night", "coats", "paywall"):
+            check(directory / f"{language}-{kind}.png", kind, require_size=(1320, 2868))
 
 
 if __name__ == "__main__":
