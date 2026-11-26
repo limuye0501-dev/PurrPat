@@ -79,17 +79,49 @@ def lighting_diff(cat: np.ndarray, empty: np.ndarray, outside: np.ndarray) -> np
     return np.abs(cat_f - corrected).max(axis=2)
 
 
+def _luminance(image: np.ndarray) -> np.ndarray:
+    blue, green, red = cv2.split(image.astype(np.float32))
+    return 0.114 * blue + 0.587 * green + 0.299 * red
+
+
+def lighting_corrected(cat: np.ndarray, empty: np.ndarray, outside: np.ndarray) -> np.ndarray:
+    """Same fit as lighting_diff, returned as the cushion relit to the plate."""
+    cat_f = cat.astype(np.float32)
+    empty_f = empty.astype(np.float32)
+    height, width = cat.shape[:2]
+    small = (width // 4, height // 4)
+    weight = cv2.resize(outside.astype(np.float32), small, interpolation=cv2.INTER_AREA)
+    gain = np.ones_like(cat_f)
+    for channel in range(3):
+        num = cv2.GaussianBlur(cv2.resize(cat_f[:, :, channel] * outside, small, interpolation=cv2.INTER_AREA), (0, 0), 8)
+        den = cv2.GaussianBlur(cv2.resize(empty_f[:, :, channel] * outside, small, interpolation=cv2.INTER_AREA), (0, 0), 8)
+        blurred = cv2.GaussianBlur(weight, (0, 0), 8) + 1e-3
+        fitted = np.clip((num / blurred) / (den / blurred + 1e-3), 0.5, 2.2)
+        gain[:, :, channel] = cv2.resize(fitted, (width, height), interpolation=cv2.INTER_LINEAR)
+    return np.clip(empty_f * gain, 0, 255)
+
+
+def _local_std(values: np.ndarray) -> np.ndarray:
+    blurred = cv2.GaussianBlur(values, (0, 0), 2.2)
+    squared = cv2.GaussianBlur(values * values, (0, 0), 2.2)
+    return np.sqrt(np.maximum(squared - blurred * blurred, 0.0))
+
+
 def segment_calico(cat: np.ndarray, empty: np.ndarray, black_mask: np.ndarray) -> np.ndarray:
-    """Calico is lit brighter than cushion.jpg. Do not clip it to the black cat: that cut notches in the hip and left a pale gap by the tail."""
+    """Fur only. Cloth that is merely darker is the window shadow, and a wide close was bridging the tail crook."""
     outside = cv2.dilate(black_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31))) == 0
-    diff = cv2.GaussianBlur(lighting_diff(cat, empty, outside.astype(np.float32)), (0, 0), 0.8)
-    raw = (diff > 36).astype(np.uint8)
+    corrected = lighting_corrected(cat, empty, outside.astype(np.float32))
+    diff = cv2.GaussianBlur(np.abs(cat.astype(np.float32) - corrected).max(axis=2), (0, 0), 0.8)
+    fur_lum = _luminance(cat)
+    cloth_lum = _luminance(corrected)
+    saturation = cat.max(axis=2).astype(np.float32) - cat.min(axis=2).astype(np.float32)
+    textured = _local_std(fur_lum) > _local_std(cloth_lum) + 3.5
+    fur = textured | (fur_lum > cloth_lum + 12) | (saturation > 32) | (fur_lum < 68)
+    raw = ((diff > 24) & fur).astype(np.uint8)
     small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     raw = cv2.morphologyEx(raw, cv2.MORPH_OPEN, small, iterations=1)
-    raw = cv2.morphologyEx(raw, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)), iterations=2)
-    raw = largest(fill_small_holes(raw, 10**9))
-    raw = cv2.morphologyEx(raw, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17)), iterations=1)
-    return largest(raw)
+    raw = cv2.morphologyEx(raw, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)), iterations=1)
+    return largest(fill_small_holes(raw, 10**9))
 
 
 def refine(binary: np.ndarray, erode_px: int = 3, feather: float = 2.6) -> tuple[np.ndarray, np.ndarray]:
@@ -162,7 +194,7 @@ def main() -> None:
         else:
             binary = segment_diff(cat, empty, 40, 16, 5)
         # Light fur is already close to the cloth, so erode less or the body opens up.
-        tight, alpha = refine(binary, erode_px=2 if name in LIGHT or name == "calico" else 3)
+        tight, alpha = refine(binary, erode_px=1 if name == "calico" else 2 if name in LIGHT else 3)
         cleaned = match_edge_light(cat, empty, tight, alpha)
         cv2.imwrite(str(folder / f"mask-{name}.png"), (alpha * 255.0).astype(np.uint8))
         cv2.imwrite(str(folder / f"plate-{name}.jpg"), cleaned, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
