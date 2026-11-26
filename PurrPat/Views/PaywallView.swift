@@ -11,10 +11,6 @@ struct PaywallView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            Capsule()
-                .fill(ink.opacity(0.25))
-                .frame(width: 36, height: 5)
-                .frame(maxWidth: .infinity)
             Text("Purr Pat Pro")
                 .font(.largeTitle.weight(.semibold))
                 .foregroundStyle(ink)

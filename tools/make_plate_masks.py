@@ -80,17 +80,16 @@ def lighting_diff(cat: np.ndarray, empty: np.ndarray, outside: np.ndarray) -> np
 
 
 def segment_calico(cat: np.ndarray, empty: np.ndarray, black_mask: np.ndarray) -> np.ndarray:
-    """Calico is lit brighter than cushion.jpg. Fit that light, then stay inside the shared pose."""
+    """Calico is lit brighter than cushion.jpg. Do not clip it to the black cat: that cut notches in the hip and left a pale gap by the tail."""
     outside = cv2.dilate(black_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31))) == 0
     diff = cv2.GaussianBlur(lighting_diff(cat, empty, outside.astype(np.float32)), (0, 0), 0.8)
-    raw = (diff > 40).astype(np.uint8)
+    raw = (diff > 36).astype(np.uint8)
     small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     raw = cv2.morphologyEx(raw, cv2.MORPH_OPEN, small, iterations=1)
-    raw = cv2.morphologyEx(raw, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)), iterations=2)
+    raw = cv2.morphologyEx(raw, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)), iterations=2)
     raw = largest(fill_small_holes(raw, 10**9))
-    # One pixel of slack around the black pose. A wide dilation is what left the pale cushion ring.
-    allowed = cv2.dilate(black_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)), iterations=1)
-    return largest(cv2.bitwise_and(raw, allowed))
+    raw = cv2.morphologyEx(raw, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17)), iterations=1)
+    return largest(raw)
 
 
 def refine(binary: np.ndarray, erode_px: int = 3, feather: float = 2.6) -> tuple[np.ndarray, np.ndarray]:
@@ -163,7 +162,7 @@ def main() -> None:
         else:
             binary = segment_diff(cat, empty, 40, 16, 5)
         # Light fur is already close to the cloth, so erode less or the body opens up.
-        tight, alpha = refine(binary, erode_px=2 if name in LIGHT else 3)
+        tight, alpha = refine(binary, erode_px=2 if name in LIGHT or name == "calico" else 3)
         cleaned = match_edge_light(cat, empty, tight, alpha)
         cv2.imwrite(str(folder / f"mask-{name}.png"), (alpha * 255.0).astype(np.uint8))
         cv2.imwrite(str(folder / f"plate-{name}.jpg"), cleaned, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
