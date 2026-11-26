@@ -49,13 +49,25 @@ jobs:
           echo "simulator $UDID"
           rm -rf /tmp/purrpat-shots
           mkdir -p /tmp/purrpat-shots shots
-          xcrun simctl boot "$UDID" || true
-          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularMode active --cellularBars 4 || true
-          xcodebuild test -project PurrPat.xcodeproj -scheme PurrPatShots -configuration Debug \
-            -destination "platform=iOS Simulator,id=$UDID" \
-            -only-testing:PurrPatUITests/ScreenshotTests/testShots \
-            -derivedDataPath DerivedData \
-            CODE_SIGNING_ALLOWED=NO
+          prepare_sim() {
+            xcrun simctl shutdown "$UDID" || true
+            xcrun simctl boot "$UDID" || true
+            perl -e 'alarm 180; exec @ARGV' xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularMode active --cellularBars 4 || true
+          }
+          run_shots() {
+            xcodebuild test -project PurrPat.xcodeproj -scheme PurrPatShots -configuration Debug \
+              -destination "platform=iOS Simulator,id=$UDID" \
+              -only-testing:PurrPatUITests/ScreenshotTests/testShots \
+              -derivedDataPath DerivedData \
+              CODE_SIGNING_ALLOWED=NO
+          }
+          prepare_sim
+          if ! run_shots; then
+            echo "UI test runner failed to attach; retrying once"
+            prepare_sim
+            run_shots
+          fi
           cp -R /tmp/purrpat-shots/. shots/
           python3 tools/check_shot.py shots
           # The stills prove the cat. Record the stroke only after the ginger cat is actually up.
