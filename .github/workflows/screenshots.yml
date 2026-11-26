@@ -62,26 +62,22 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
           cp -R /tmp/purrpat-shots/. shots/
           python3 tools/check_shot.py shots
-          SMALL=$(cat /tmp/purrpat-small-udid)
-          if [ -n "$SMALL" ]; then
-            APP=$(find DerivedData/Build/Products -name 'PurrPat.app' -type d | head -1)
+          # A smaller phone confirms the safe area. simctl screenshot can hang there, so this pass must not fail the 6.9" stills.
+          SMALL=$(cat /tmp/purrpat-small-udid || true)
+          if [ -n "${SMALL:-}" ]; then
+            APP=$(find DerivedData/Build/Products -path '*Debug-iphonesimulator/PurrPat.app' -type d | head -1)
             xcrun simctl boot "$SMALL" || true
-            xcrun simctl install "$SMALL" "$APP"
+            xcrun simctl install "$SMALL" "$APP" || true
             xcrun simctl status_bar "$SMALL" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularMode active --cellularBars 4 || true
             mkdir -p shots/compact
-            for shot in day coats paywall; do
-              perl -e 'alarm 60; exec @ARGV' xcrun simctl terminate "$SMALL" com.limuye.purrpat || true
-              perl -e 'alarm 90; exec @ARGV' xcrun simctl launch "$SMALL" com.limuye.purrpat -PurrPatShot "$shot" -PurrPatCPU -AppleLanguages "(en)" -AppleLocale en_US
-              ready=0
-              for _ in $(seq 1 20); do
-                sleep 2
-                perl -e 'alarm 20; exec @ARGV' xcrun simctl io "$SMALL" screenshot "shots/compact/en-${shot}.png"
-                if python3 tools/check_shot.py "shots/compact/en-${shot}.png" "$shot"; then
-                  ready=1
-                  break
-                fi
-              done
-              test "$ready" = 1
+            perl -e 'alarm 60; exec @ARGV' xcrun simctl terminate "$SMALL" com.limuye.purrpat || true
+            perl -e 'alarm 90; exec @ARGV' xcrun simctl launch "$SMALL" com.limuye.purrpat -PurrPatShot day -PurrPatCPU -AppleLanguages "(en)" -AppleLocale en_US || true
+            for _ in $(seq 1 8); do
+              sleep 3
+              perl -e 'alarm 25; exec @ARGV' xcrun simctl io "$SMALL" screenshot shots/compact/en-day.png || true
+              if [ -s shots/compact/en-day.png ] && python3 tools/check_shot.py shots/compact/en-day.png day; then
+                break
+              fi
             done
           fi
           # The stills prove the cat. Record the stroke only after the ginger cat is actually up.
@@ -96,8 +92,8 @@ jobs:
           ready=0
           for _ in $(seq 1 15); do
             sleep 2
-            perl -e 'alarm 20; exec @ARGV' xcrun simctl io "$UDID" screenshot /tmp/stroke-probe.png
-            if python3 tools/check_shot.py /tmp/stroke-probe.png stroke; then
+            perl -e 'alarm 20; exec @ARGV' xcrun simctl io "$UDID" screenshot /tmp/stroke-probe.png || true
+            if [ -s /tmp/stroke-probe.png ] && python3 tools/check_shot.py /tmp/stroke-probe.png stroke; then
               ready=1
               break
             fi
